@@ -1,0 +1,57 @@
+[project]
+name = "pleiades-mcp"
+version = "0.1.0"
+description = "MCP server exposing Pleiades YouTube search, transcript, keyframe, audio, and transcript-summary capabilities to LLM clients"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.12, <3.13"
+authors = [
+    {name = "Ahmad Saeed Zaidi"}
+]
+dependencies = [
+    # Local sibling packages (install atlas + maia editable first).
+    "pleiades-atlas[hf]",
+    "pleiades-maia",
+    # MCP SDK (FastMCP server).
+    "mcp>=1.2.0,<2.0.0",
+    # Speech-to-text + summary models.
+    "openai>=1.30.0,<2.0.0",
+    # SSE/HTTP transport extras handled by the mcp SDK.
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.15.0,<1.0.0",
+    "pytest>=8.0.0,<9.0.0",
+    "pytest-asyncio>=0.23.0,<1.0.0",
+]
+
+[project.scripts]
+pleiades-mcp = "pleiades_mcp.server:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+lint.select = ["E", "W", "F", "I", "N", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["src", "../atlas/src", "../maia/src", ".."]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

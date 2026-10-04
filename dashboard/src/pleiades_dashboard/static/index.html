@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f8fc">
+  <title>Pleiades · Pipeline workspace</title>
+  <base href="__PLEIADES_BASE__">
+  <link rel="icon" href="static/mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="static/style.css">
+  <script src="static/graph.js" defer></script>
+  <script src="static/app.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="#overview"><img src="static/mark.svg" alt="" width="36" height="36"><span>Pleiades<span class="brand-sub">YOUTUBE INTELLIGENCE</span></span></a>
+    <div class="workspace-label"><span class="workspace-icon">P</span><span>Pipeline workspace<small>Production collection</small></span><span class="chevron">⌄</span></div>
+    <p class="nav-caption">WORKSPACE</p>
+    <nav aria-label="Workspace navigation">
+      <a href="#overview" class="nav-link active" data-view="overview"><span class="nav-icon">◫</span>Overview</a>
+      <a href="#videos" class="nav-link" data-view="videos"><span class="nav-icon">▤</span>Video library<span class="nav-count" id="nav-total">—</span></a>
+      <a href="#graph" class="nav-link" data-view="graph"><span class="nav-icon">✧</span>Knowledge graph</a>
+      <a href="#queries" class="nav-link" data-view="queries"><span class="nav-icon">⌕</span>Discovery queries</a>
+      <a href="#activity" class="nav-link" data-view="activity"><span class="nav-icon">↗</span>Activity</a>
+    </nav>
+    <div class="sidebar-bottom"><div class="connection"><span class="dot" id="service-dot"></span><span id="service-label">Connecting to pipeline</span></div><p>Discover. Capture. Understand.</p><div class="profile"><span class="avatar">OP</span><span>Operator workspace<small>Read-only access</small></span></div></div>
+  </aside>
+  <div class="main-shell">
+    <header class="topbar"><div><span class="breadcrumb">Workspace</span><span class="crumb-divider">/</span><strong id="breadcrumb-page">Overview</strong></div><div class="topbar-right"><span class="mode-badge" id="mode-badge">READ ONLY</span><span class="topbar-date" id="today"></span></div></header>
+    <main>
+      <div class="page-heading"><div><div class="eyebrow">YOUR COLLECTION, AT A GLANCE</div><h1 id="page-title">Pipeline overview</h1><p id="page-description">Follow your YouTube data from discovery to extraction.</p></div><div class="refresh-controls"><label class="auto-refresh"><input type="checkbox" id="auto-refresh" checked> Auto-refresh</label><button class="button" id="refresh"><span>↻</span> Refresh</button></div></div>
+      <div class="notice" id="demo-notice" hidden>Demo workspace · All values are sample data. Start without --demo to connect to your pipeline.</div>
+      <div class="error-banner" id="error" role="alert" hidden></div>
+      <section id="overview-view" aria-label="Pipeline overview">
+        <div class="metrics">
+          <article class="metric"><div class="metric-top">Videos collected<span class="metric-icon purple">▤</span></div><div class="metric-value" id="metric-total">—</div><div class="metric-caption"><span class="mini-dot purple"></span>All lifecycle states</div></article>
+          <article class="metric"><div class="metric-top">Discovered today<span class="metric-icon blue">↗</span></div><div class="metric-value" id="metric-discovered">—</div><div class="metric-caption">New videos in the last 24 hours</div></article>
+          <article class="metric"><div class="metric-top">Videos tracked<span class="metric-icon green">◎</span></div><div class="metric-value" id="metric-tracked">—</div><div class="metric-caption" id="metric-tracking-caption">Adaptive tracking watchlist</div></article>
+          <article class="metric"><div class="metric-top">Needs attention<span class="metric-icon amber">!</span></div><div class="metric-value" id="metric-failed">—</div><div class="metric-caption">Failed lifecycle or extraction stage</div></article>
+        </div>
+        <div class="insight-grid">
+          <article class="panel discovery-panel"><div class="panel-heading"><div><h2>Discovery activity</h2><p>Videos added to your collection</p></div><span class="pill">Last 24 hours</span></div><div class="chart-summary"><strong id="chart-total">—</strong><span>new videos</span><span class="chart-legend"><i></i>Discovered</span></div><div id="discovery-chart" class="chart" role="img" aria-label="Hourly discoveries over the last 24 hours"></div><div class="chart-footnote">Hourly buckets · UTC</div></article>
+          <article class="panel coverage-panel"><div class="panel-heading"><div><h2>Extraction coverage</h2><p>Completed stages across the collection</p></div><span class="panel-symbol">◈</span></div><div id="coverage" class="coverage"></div><div class="coverage-note">Archived artifacts can remain in the vault after hot-stage flags are cleared. Full clips are captured on demand.</div></article>
+        </div>
+        <div class="pipeline-strip"><span class="pipeline-strip-icon">✦</span><div><strong>One pipeline. Every layer of the story.</strong><p>Discovery → source media → audio, keyframes & transcripts → durable storage</p></div><span class="pill" id="vault-label">Checking vault queue</span></div>
+      </section>
+      <section class="panel library-panel" id="library-section" aria-label="Video library">
+        <div class="panel-heading"><div><h2 id="library-title">Recent videos</h2><p id="library-description">The latest arrivals in your collection</p></div><a class="text-link" id="all-videos" href="#videos">View library <span>→</span></a></div>
+        <div class="filters"><div class="search-field"><span>⌕</span><input id="search" type="search" placeholder="Search videos, channels or video IDs…" maxlength="120" aria-label="Search videos"></div><select id="status-filter" aria-label="Filter by lifecycle status"><option value="">All statuses</option><option>PENDING</option><option>PROCESSING</option><option>PROCESSED</option><option>ARCHIVED</option><option>FAILED</option></select><select id="stage-filter" aria-label="Filter by failed stage"><option value="">All extraction stages</option><option value="raw">Source failed</option><option value="audio">Audio failed</option><option value="visuals">Keyframes failed</option><option value="transcript">Transcript failed</option><option value="clip">Clip failed</option></select></div>
+        <div class="table-scroll"><table><thead><tr><th>VIDEO</th><th>STATUS</th><th>EXTRACTION <span class="column-hint">S / A / K / T</span></th><th>VIEWS</th><th>DISCOVERED</th><th></th></tr></thead><tbody id="video-rows"><tr><td colspan="6" class="empty-state">Loading your collection…</td></tr></tbody></table></div>
+        <div class="table-footer"><span id="page-summary" aria-live="polite">Connecting…</span><div><button class="pager" id="previous" aria-label="Previous page">←</button><span id="page-number">1</span><button class="pager" id="next" aria-label="Next page">→</button></div></div>
+      </section>
+      <section id="queries-view" class="panel" aria-label="Discovery queries" hidden><div class="panel-heading"><div><h2>Discovery queue</h2><p>The 100 highest-priority search terms scheduled by the pipeline</p></div><span class="pill">Live queue</span></div><div class="table-scroll"><table><thead><tr><th>SEARCH TERM</th><th>PRIORITY</th><th>MENTIONS</th><th>RESULTS</th><th>STATUS</th><th>LAST SEARCHED</th></tr></thead><tbody id="query-rows"></tbody></table></div></section>
+      <section id="activity-view" class="panel" aria-label="Recent activity" hidden><div class="panel-heading"><div><h2>Pipeline events</h2><p>The 80 most recent persisted events. Agent cycles without events appear in service logs.</p></div><span class="pill">Event log</span></div><div id="event-list" class="event-list"></div></section>
+      <section id="graph-view" aria-label="Knowledge graph" hidden>
+        <div class="metrics graph-metrics">
+          <article class="metric"><div class="metric-top">Wikipedia topics</div><div class="metric-value" id="graph-topic-count">—</div><div class="metric-caption">Topics reported by YouTube</div></article>
+          <article class="metric"><div class="metric-top">Topic relationships</div><div class="metric-value" id="graph-edge-count">—</div><div class="metric-caption">Video and channel observations</div></article>
+          <article class="metric"><div class="metric-top">Videos checked</div><div class="metric-value" id="graph-video-count">—</div><div class="metric-caption" id="graph-video-coverage">Existing collection backfill</div></article>
+          <article class="metric"><div class="metric-top">Channels checked</div><div class="metric-value" id="graph-channel-count">—</div><div class="metric-caption" id="graph-channel-coverage">Channel topics are separate facts</div></article>
+        </div>
+        <div class="graph-layout">
+          <aside class="panel graph-topics"><div class="panel-heading"><div><h2>Explore a topic</h2><p>Wikipedia topics in your collection</p></div></div><div class="search-field graph-search"><span>⌕</span><input type="search" id="topic-search" maxlength="120" placeholder="Find a topic…" aria-label="Search graph topics"></div><div id="topic-list" class="topic-list"></div></aside>
+          <article class="panel graph-panel"><div class="panel-heading"><div><h2 id="graph-heading">Your knowledge graph</h2><p>Click a video to inspect it or a topic to explore its neighbors.</p></div><button class="button" id="graph-export" disabled>Export JSON</button></div>
+            <div class="graph-toolbar"><div class="graph-legend"><span><i class="topic-color"></i>Topic</span><span><i class="video-color"></i>Video</span><span><i class="channel-color"></i>Channel</span></div><label>Videos in view <select id="graph-limit"><option value="25">25</option><option value="50">50</option><option value="10">10</option></select></label></div>
+            <div id="graph-canvas" class="graph-canvas" aria-label="Topic connections"></div>
+            <div id="graph-notes" class="graph-notes"></div>
+          </article>
+        </div>
+        <p class="graph-explanation">Topics are YouTube’s broad Wikipedia classifications. Lines show observed topic links and publishing channels. Nearby topics share videos in this sample; they do not imply Wikipedia links or transcript-level facts.</p>
+      </section>
+      <footer class="page-footer"><span><span class="mini-dot green"></span>Observing the collection · No changes to extraction jobs</span><span id="updated">Awaiting first update</span></footer>
+    </main>
+  </div>
+  <dialog id="video-dialog"><div class="dialog-heading"><span class="eyebrow">VIDEO INSPECTOR</span><button class="close-button" id="close-video" aria-label="Close video inspector">×</button></div><div id="video-detail"></div></dialog>
+  <dialog id="access-dialog"><h2>Connect to your workspace</h2><p>This dashboard requires an access token.</p><form id="access-form"><label for="access-token">Dashboard access token</label><input id="access-token" type="password" autocomplete="off" required><button class="button primary" type="submit">Connect</button></form></dialog>
+</body>
+</html>

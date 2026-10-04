@@ -1,0 +1,49 @@
+# Build context hygiene — keep `docker build` (context: .) lean and secret-free.
+# The runtime image copies tiered_storage/, atlas/ and maia/ explicitly.
+
+# Virtual envs / caches
+.venv/
+**/__pycache__/
+**/*.egg-info/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.aws/
+.gcp/
+
+# VCS + CI
+.git/
+.github/
+
+# Large media / dumps that must never be baked into an image
+*.webm
+*.mp4
+*.pdf
+*.log
+
+# Local secrets / cookies — mount these at runtime, never COPY them in
+*.cookies.txt
+new_cookies.txt
+final_cookies.txt
+www.youtube.cookies.txt
+yt_cookies.txt
+
+# Packages and guides outside the single-scheduler runtime image.
+alkyone/
+mcp/
+dashboard/
+tools/
+data/
+docs/
+agents/
+skills-lock.json
+SUMMARY.md
+.env
+.env.*
+.agents/
+**/*.json3
+**/*.part
+
+# Misc
+**/node_modules/
+.DS_Store

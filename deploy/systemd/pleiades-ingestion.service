@@ -1,0 +1,68 @@
+[Unit]
+Description=Pleiades ingestion scheduler (executor VPS)
+After=network-online.target youtube-proxy.service bgutil-provider.service
+Wants=network-online.target youtube-proxy.service bgutil-provider.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/code/pleiades
+Environment=PYTHONPATH=/home/ubuntu/code/pleiades/atlas/src:/home/ubuntu/code/pleiades/maia/src
+Environment=HOME=/home/ubuntu
+Environment=PREFECT_API_URL=http://10.0.0.22:4200/api
+Environment=VAULT_PROVIDER=huggingface
+Environment=COMPLIANCE_MODE=false
+Environment=YOUTUBE_COOKIES_PATH=/home/ubuntu/code/pleiades/www.youtube.cookies.txt
+Environment=YOUTUBE_PROXY=socks5h://127.0.0.1:1090
+ExecStart=/home/ubuntu/code/pleiades/.venv/bin/python -m maia.orchestrator
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillMode=control-group
+KillSignal=SIGTERM
+
+# Defense-in-depth limits for the single in-process scheduler.
+CPUQuota=180%
+TasksMax=256
+MemoryMax=4G
+
+# Hardening.
+#
+# This unit runs the whole production ingestion fleet as `ubuntu`, driving
+# yt-dlp, ffmpeg and network I/O in one process. It parses attacker-supplied
+# YouTube content, so it is the highest-value sandbox target in the fleet: it
+# previously had no filesystem or syscall restrictions at all, so a compromise
+# reached ~/.ssh, every file under /home/ubuntu, and the network.
+#
+# ProtectSystem=strict makes the whole filesystem read-only except the paths
+# listed in ReadWritePaths. If a path is missing the unit fails to start rather
+# than silently running degraded — that is intentional, so a moved data directory
+# is caught at deploy time.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+CapabilityBoundingSet=
+UMask=0077
+ReadWritePaths=/home/ubuntu/code/pleiades/data /home/ubuntu/code/pleiades/www.youtube.cookies.txt /var/lib/pleiades /tmp
+# ffmpeg and yt-dlp are spawned as subprocesses and need to create pipes/sockets.
+PrivateUsers=no
+
+[Install]
+WantedBy=multi-user.target

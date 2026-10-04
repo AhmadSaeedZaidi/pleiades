@@ -1,0 +1,99 @@
+"""Shared typing protocol for the composed ``VideoRepository``.
+
+Mixins that call sibling methods type ``self`` as :class:`VideoRepositoryProtocol`,
+which models the full public surface, so ``mypy --strict`` passes with no runtime cost.
+"""
+
+from collections.abc import Sequence
+from datetime import datetime
+from typing import Any, Protocol
+
+from atlas.adapters import DatabaseAdapterProtocol
+from atlas.models.video import Video, VideoStats
+from tiered_storage import StoredItem
+
+
+class VideoRepositoryProtocol(DatabaseAdapterProtocol, Protocol):
+    """Full public interface of the composed ``VideoRepository``.
+
+    Declares every method a mixin may invoke on ``self`` across mixin
+    boundaries. Extends :class:`DatabaseAdapterProtocol` so the low-level
+    ``_execute`` / ``_fetch_*`` helpers are also visible.
+    """
+
+    async def _finalize_archives(self, items: Sequence[StoredItem]) -> set[str]: ...
+
+    async def get_by_id(self, video_id: str) -> Video | None: ...
+
+    async def get_latest_stats(self, video_id: str) -> VideoStats | None: ...
+
+    async def get_latest_stats_batch(self, video_ids: list[str]) -> dict[str, VideoStats]: ...
+
+    async def ingest_video_metadata(
+        self, video_data: dict[str, Any], priority_override: int | None = None
+    ) -> None: ...
+
+    async def log_stats_batch(self, stats_list: list[VideoStats]) -> None: ...
+
+    async def update_stats_batch(
+        self,
+        updates: list[dict[str, Any]],
+        watchlist_updates: list[dict[str, Any]] | None = None,
+        tracked_at: datetime | None = None,
+    ) -> None: ...
+
+    async def claim_scribe_batch(self, batch_size: int = 10) -> list[Video]: ...
+
+    async def claim_painter_batch(self, batch_size: int = 5) -> list[Video]: ...
+
+    async def claim_streamer_batch(self, batch_size: int = 5) -> list[Video]: ...
+
+    async def claim_singer_batch(self, batch_size: int = 5) -> list[Video]: ...
+
+    async def claim_muralist_batch(self, batch_size: int = 5) -> list[Video]: ...
+
+    async def mark_transcript_safe(self, video_id: str) -> None: ...
+
+    async def mark_visuals_safe(self, video_id: str) -> None: ...
+
+    async def mark_fetched(
+        self,
+        video_id: str,
+        raw_uri: str,
+    ) -> None: ...
+
+    async def mark_audio_safe(self, video_id: str) -> None: ...
+
+    async def release_audio_to_pending(self, video_id: str) -> None: ...
+
+    async def release_visuals_to_pending(self, video_id: str) -> None: ...
+
+    async def release_clip_to_pending(self, video_id: str) -> None: ...
+
+    async def mark_video_safe(self, video_id: str) -> None: ...
+
+    async def mark_done(self, video_id: str) -> None: ...
+
+    async def record_transcript(
+        self,
+        video_id: str,
+        vault_uri: str | None,
+        language: str = "en",
+        content_json: Any | None = None,
+    ) -> None: ...
+
+    async def release_raw_to_pending(self, video_id: str) -> None: ...
+
+    async def release_transcript_to_pending(self, video_id: str) -> None: ...
+
+    async def mark_step_failed(self, video_id: str, step: str) -> None: ...
+
+    async def reset_failed_to_pending(self) -> int: ...
+
+    async def count_failed_steps(self) -> dict[str, int]: ...
+
+    async def mark_archived(self, video_id: str) -> None: ...
+
+    async def find_transcript_video_ids(self, scope: str = "without_visuals") -> list[str]: ...
+
+    async def unmark_transcripts_batch(self, video_ids: list[str]) -> int: ...

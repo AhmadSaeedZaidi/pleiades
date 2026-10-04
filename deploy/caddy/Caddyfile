@@ -1,0 +1,30 @@
+{
+	http_port 8090
+	https_port 8443
+	auto_https disable_redirects
+}
+
+http://opencodeserver.duckdns.org:8090 {
+	respond "Not found" 404
+}
+
+opencodeserver.duckdns.org:8443 {
+	tls {
+		issuer acme {
+			dir https://acme-v02.api.letsencrypt.org/directory
+			disable_tlsalpn_challenge
+		}
+	}
+	basic_auth {
+		operator {$PLEIADES_DASHBOARD_PASSWORD_HASH}
+	}
+	redir /pleiades /pleiades/ 308
+	handle_path /pleiades/* {
+		reverse_proxy 127.0.0.1:8080 {
+			header_up -Authorization
+		}
+	}
+	handle {
+		respond "Not found" 404
+	}
+}
