@@ -77,12 +77,16 @@ async def test_hunt_history_handles_429_resiliency_strategy(mock_strategy: Magic
     """Test Archeologist raises QuotaExhaustedError on all-keys-exhausted."""
     mock_strategy.search.side_effect = QuotaExhaustedError("All keys exhausted")
 
-    with patch("maia.archeologist.flow.VideoRepository") as MockRepo:
+    with (
+        patch("maia.archeologist.flow.VideoRepository") as MockRepo,
+        patch("maia.archeologist.flow.notify_quota_exhausted", new_callable=AsyncMock) as notify,
+    ):
         mock_repo = MockRepo.return_value
         mock_repo.ingest_video_metadata = AsyncMock()
 
         with pytest.raises(QuotaExhaustedError):
             await hunt_history_task(year=2010, month=1, strategy=mock_strategy)
+        notify.assert_awaited_once_with("archeologist")
 
 
 @pytest.mark.asyncio

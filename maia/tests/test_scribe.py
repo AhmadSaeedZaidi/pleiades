@@ -161,6 +161,7 @@ async def test_transcribe_audio_tempfile_cleaned_on_success():
         patch("maia.scribe.flow.TranscriptLoader") as MockLoader,
         patch("maia.scribe.flow.transcribe_audio_path", side_effect=transcribe),
         patch("maia.scribe.flow.audio_cap_reached", return_value=False),
+        patch("maia.scribe.flow.record_audio_usage") as record_usage,
     ):
         mock_get_vault.return_value.fetch_audio = MagicMock(
             side_effect=lambda path: io.BytesIO(b"OPUS") if path.startswith("VIDEO_") else None
@@ -170,6 +171,7 @@ async def test_transcribe_audio_tempfile_cleaned_on_success():
         )
 
         result = await _transcribe(video)
+        record_usage.assert_called_once_with(1)
 
     assert result[0]["text"] == "done"
     assert paths and not paths[0].exists()

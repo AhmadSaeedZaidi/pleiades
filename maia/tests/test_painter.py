@@ -20,6 +20,14 @@ from maia.painter.streamer import StealthVideoStreamer, StreamRateLimitError
 FAKE_WEBP = b"RIFF\x00\x00\x00\x00WEBP" + b"\x00" * 100
 
 
+@pytest.fixture(autouse=True)
+def painter_vault():
+    """Legacy metadata fallback tests start with an empty, local fake vault."""
+    with patch("maia.painter.flow.get_vault") as get_vault:
+        get_vault.return_value.fetch_binary.return_value = None
+        yield get_vault.return_value
+
+
 def _fake_ffmpeg(bytes_out: bytes, returncode: int = 0):
     """Stand-in for subprocess.run that writes *bytes_out* to the output file.
 
@@ -435,6 +443,7 @@ async def test_process_frames_propagates_resiliency_strategy():
     with (
         patch("maia.painter.flow.VideoRepository"),
         patch("maia.painter.flow.StealthVideoStreamer") as MockStreamer,
+        patch("maia.painter.flow.notify_quota_exhausted", new_callable=AsyncMock) as notify,
     ):
         mock_streamer_instance = MockStreamer.return_value
         mock_streamer_instance.extract_info = MagicMock(
@@ -443,6 +452,7 @@ async def test_process_frames_propagates_resiliency_strategy():
 
         with pytest.raises(QuotaExhaustedError):
             await process_frames_task(video)
+        notify.assert_awaited_once_with("painter")
 
 
 @pytest.mark.asyncio

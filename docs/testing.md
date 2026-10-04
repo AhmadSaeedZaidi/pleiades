@@ -5,8 +5,10 @@ tests, dashboard JavaScript syntax, and current documentation links.
 `make test-unit` runs tiered storage, Atlas, Maia, MCP, the Alkyone safety guard, and dashboard
 unit suites. Root `pytest` also defaults to these unit paths.
 
-Unit tests inject fake collaborators. The root `conftest.py` prevents accidental
-pipeline database access. Each component runs with dummy credentials; MCP tests
+Unit tests inject fake collaborators. The shared `unit_test_guard` fixture blocks
+unmocked PostgreSQL connections, network connections and DNS lookups, and gives
+each test its own temporary agent-state file. Each component runs with dummy
+credentials; MCP tests
 override inherited credentials instead of retaining production environment
 values. Mock event emission, vault methods, and notifications when exercising
 agent failure paths. Test plain `*_operation` functions or `.fn` task bodies;

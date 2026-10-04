@@ -173,8 +173,12 @@ async def test_update_stats_propagates_rate_limit(
 
     mock_strategy.fetch_videos.side_effect = QuotaExhaustedError("All keys exhausted")
 
-    with pytest.raises(QuotaExhaustedError):
+    with (
+        patch("maia.tracker.flow.notify_quota_exhausted", new_callable=AsyncMock) as notify,
+        pytest.raises(QuotaExhaustedError),
+    ):
         await update_stats_task([mock_tracker_target], mock_strategy)
+    notify.assert_awaited_once_with("tracker")
 
 
 @patch("maia.tracker.flow.notify_quota_exhausted", new_callable=AsyncMock)

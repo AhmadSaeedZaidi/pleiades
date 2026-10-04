@@ -221,6 +221,12 @@ obsolete registry bootstrap and its duplicate Dockerfile are removed, along with
 retired training workflows. There were no open issues or PRs to triage at inspection.
 Historical branches have not been deleted.
 
+PR #9 is open. Its first CI run exposed unit tests that still used the shared
+agent-state file and unmocked vault reads. Unit fixtures now refuse network
+connections and DNS lookups, isolate state per test, and explicitly fake the
+affected vault/notification/quota collaborators. The canonical gate passes
+with those guards in place; integration tiers retain their separate opt-ins.
+
 ## Disk pressure follow-up
 
 The user requested a better SQL/vault tradeoff after activation. Measurement

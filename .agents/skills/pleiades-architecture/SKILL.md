@@ -40,7 +40,8 @@ service, change its environment, or write to its database during cleanup.
 
 `make check` runs lint/types, unit suites, JS syntax, and active documentation
 links. Tests mock database/vault/network/notification collaborators. The shared
-`unit_test_guard` fixture blocks unmocked PostgreSQL calls in unit suites.
+`unit_test_guard` fixture blocks unmocked PostgreSQL and network calls in unit
+suites and isolates the agent-state file in a temporary test directory.
 Mock event emission on failure paths. Test plain operations or Prefect task `.fn`
 bodies, using Maia's logger/context fixtures when necessary.
 
