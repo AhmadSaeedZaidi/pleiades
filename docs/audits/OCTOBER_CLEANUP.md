@@ -237,3 +237,19 @@ records per cycle under count/byte/time budgets, and scope Hub downloads to
 short-lived local directories. Cold verification and row-version checks remain
 mandatory. Cache deletion and physical database maintenance are recorded
 separately from those logical retention changes below after execution.
+
+
+Execution: after explicit user approvals, unused Docker build cache reclaimed
+4.506 GB. The current pipeline dataset's 11 GiB local Hub cache was removed only
+after remote repository access succeeded; other caches, running containers,
+tagged images, SQL rows, and remote vault contents were preserved. Filesystem
+usage fell from 100% to 68%, with about 15 GiB available. Ingestion was restarted
+and is active/running with zero automatic restarts. Its first new transcript
+batch verified and released 100 bodies with no failures. Reconciliation continues
+gradually; this is not a claim that all 56,000 retained bodies are already cold.
+
+Ordinary `VACUUM (ANALYZE)` completed for transcripts and video metrics under
+bounded statement/lock timeouts. Planner counts are now refreshed and dead
+space reusable. The reviewed maintenance migration lowers per-table vacuum and
+analyze scale factors to 2%, including transcript TOAST. It is live and preserves
+rows. No blocking full-table rewrite or filesystem shrink was performed.

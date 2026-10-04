@@ -146,3 +146,9 @@ space. Ordinary `VACUUM (ANALYZE)` makes dead space reusable and refreshes plann
 statistics; it is not a promise to shrink relation files. Table rewrites need
 extra free disk and locks. Inspect measured sizes and existing maintenance before
 choosing compaction. Never delete SQL payloads solely because a vault URI exists.
+
+The reviewed [per-table maintenance migration](../deploy/sql/20261004_storage_maintenance.sql)
+lowers vacuum/analyze scale factors to 2% for transcripts and detailed metrics,
+including transcript TOAST payloads. This makes released space reusable sooner
+without changing global server settings. It preserves rows and is separate from
+one-time operator `VACUUM (ANALYZE)` maintenance.

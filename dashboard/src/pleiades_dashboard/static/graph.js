@@ -28,8 +28,10 @@ function renderGraph(data) {
   if (!data.nodes.length) return empty(canvas, "Topics will appear as the background enrichment checks your existing collection. YouTube does not provide topics for every resource.");
 
   const ns = "http://www.w3.org/2000/svg";
+  const groups = ["topic", "video", "channel"].map(kind => data.nodes.filter(n => n.kind === kind));
+  const height = Math.max(650, ...groups.map(items => items.length * 18 + 100));
   const svg = document.createElementNS(ns, "svg");
-  svg.setAttribute("viewBox", "0 0 1000 650");
+  svg.setAttribute("viewBox", `0 0 1000 ${height}`);
   svg.setAttribute("role", "group");
   svg.setAttribute("aria-label", "Topics connect to videos and channels; videos connect to their publishers");
   function shape(tag, attrs, text) {
@@ -38,12 +40,11 @@ function renderGraph(data) {
     if (text != null) el.textContent = text;
     return el;
   }
-  const groups = ["topic", "video", "channel"].map(kind => data.nodes.filter(n => n.kind === kind));
   const positions = new Map();
   const columns = [120, 465, 820];
   groups.forEach((items, column) => {
     svg.append(shape("text", {x: columns[column], y: 25, class: "graph-column-label"}, ["WIKIPEDIA TOPICS", "COLLECTED VIDEOS", "PUBLISHING CHANNELS"][column]));
-    items.forEach((item, i) => positions.set(item.id, {x: columns[column], y: 65 + (i + .5) * 550 / Math.max(1, items.length)}));
+    items.forEach((item, i) => positions.set(item.id, {x: columns[column], y: 55 + (i + .5) * (height - 100) / Math.max(1, items.length)}));
   });
   const lines = new Map();
   data.edges.forEach(edge => {

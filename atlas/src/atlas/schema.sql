@@ -409,3 +409,14 @@ CREATE INDEX IF NOT EXISTS idx_topic_sync_due ON youtube_topic_sync(kind, next_a
 
 COMMENT ON TABLE knowledge_topics IS 'Canonical Wikipedia URLs reported by YouTube topicDetails.topicCategories.';
 COMMENT ON TABLE youtube_topic_sync IS 'Observed topic coverage and expiring owned leases; absence, empty topics and unavailable resources are distinct.';
+
+-- Keep high-churn hot storage reusable.
+ALTER TABLE transcripts SET (
+    autovacuum_vacuum_scale_factor = 0.02,
+    autovacuum_analyze_scale_factor = 0.02,
+    toast.autovacuum_vacuum_scale_factor = 0.02
+);
+ALTER TABLE video_stats_log SET (
+    autovacuum_vacuum_scale_factor = 0.02,
+    autovacuum_analyze_scale_factor = 0.02
+);
