@@ -13,6 +13,7 @@ Agent operations for the YouTube pipeline. The live process is
 | Tracker: engagement | 60 seconds | 50 |
 | Heartbeat: operator reporting | 900 seconds | — |
 | Janitor: persistence/retention | 900 seconds | operation-specific |
+| Topics: Wikipedia classifications | 600 seconds | 4 × 50 IDs |
 
 Cadences include operation runtime. Archeologist and Muralist/full clips remain
 manual. The scheduler calls plain `*_operation` functions and isolates cycle
@@ -21,6 +22,10 @@ failures. Prefect adapters remain for compatibility, without scheduling work.
 Agents call Atlas repositories and storage/network collaborators. Vault operations
 use a bounded executor; media subprocesses require ffmpeg, Deno and configured
 YouTube egress/cookies. Scribe stages transcripts; Janitor commits them.
+
+Discord heartbeats include knowledge graph topic/link counts, video/channel
+coverage, recent checks and the last observation time. Backfill can be paused
+independently; reporting reads PostgreSQL and consumes no YouTube quota.
 
 ```bash
 make -C maia test-unit

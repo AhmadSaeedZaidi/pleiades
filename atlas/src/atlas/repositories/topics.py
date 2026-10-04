@@ -6,6 +6,7 @@ from typing import Any
 from uuid import uuid4
 
 from psycopg import AsyncConnection
+from psycopg.rows import dict_row
 
 from atlas.adapters import DatabaseAdapter
 from atlas.topics import Topic, resource_topics
@@ -77,6 +78,43 @@ async def record_topic_snapshot(
 
 
 class TopicRepository(DatabaseAdapter):
+    async def heartbeat_snapshot(self) -> dict[str, Any]:
+        """Report current graph coverage in one bounded, read-only transaction."""
+        async with self._connection() as conn, conn.transaction():
+            await conn.execute("SET TRANSACTION READ ONLY")
+            await conn.execute("SET LOCAL statement_timeout = '5s'")
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute("""WITH coverage AS (
+                    SELECT 'video' AS kind,s.observed_at,s.outcome
+                    FROM videos v LEFT JOIN youtube_topic_sync s
+                        ON s.kind='video' AND s.resource_id=v.id
+                    UNION ALL
+                    SELECT 'channel' AS kind,s.observed_at,s.outcome
+                    FROM channels c LEFT JOIN youtube_topic_sync s
+                        ON s.kind='channel' AND s.resource_id=c.id
+                ) SELECT
+                    count(*) FILTER (WHERE kind='video') AS video_total,
+                    count(*) FILTER (WHERE kind='channel') AS channel_total,
+                    count(*) FILTER (WHERE kind='video' AND observed_at IS NOT NULL)
+                        AS video_checked,
+                    count(*) FILTER (WHERE kind='channel' AND observed_at IS NOT NULL)
+                        AS channel_checked,
+                    count(*) FILTER (WHERE kind='video'
+                        AND observed_at > now()-INTERVAL '1 hour') AS video_checked_1h,
+                    count(*) FILTER (WHERE kind='channel'
+                        AND observed_at > now()-INTERVAL '1 hour') AS channel_checked_1h,
+                    count(*) FILTER (WHERE outcome='empty') AS empty,
+                    count(*) FILTER (WHERE outcome='unavailable') AS unavailable,
+                    max(observed_at) AS latest_observed,
+                    (SELECT count(*) FROM knowledge_topics) AS topic_count,
+                    (SELECT count(*) FROM video_topics) AS video_edges,
+                    (SELECT count(*) FROM channel_topics) AS channel_edges
+                    FROM coverage""")
+                snapshot = await cursor.fetchone()
+        if snapshot is None:
+            raise RuntimeError("Graph coverage query returned no snapshot")
+        return snapshot
+
     async def claim(self, kind: str, limit: int = 50) -> tuple[str, list[str]]:
         if kind not in _TABLES or not 1 <= limit <= 50:
             raise ValueError("Invalid topic claim")

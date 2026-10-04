@@ -2,6 +2,7 @@
 Tests for Maia Heartbeat fleet-unit enumeration.
 """
 
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -11,11 +12,37 @@ from maia.heartbeat.flow import (
     _RUN_STATE_HEALTH,
     FLEET_DEPLOYMENTS,
     FLEET_UNITS,
+    _knowledge_graph_field,
     _unit_state,
     collect_fleet_status,
     heartbeat_flow,
     heartbeat_operation,
 )
+
+_GRAPH_METRICS = {
+    "topic_count": 3,
+    "video_edges": 120,
+    "channel_edges": 30,
+    "video_total": 100,
+    "video_checked": 75,
+    "channel_total": 20,
+    "channel_checked": 10,
+    "video_checked_1h": 9,
+    "channel_checked_1h": 3,
+    "empty": 4,
+    "unavailable": 2,
+    "latest_observed": datetime(2026, 10, 4, tzinfo=UTC),
+}
+
+
+@pytest.fixture(autouse=True)
+def graph_metrics():
+    with patch(
+        "maia.heartbeat.flow.collect_knowledge_graph_metrics",
+        new_callable=AsyncMock,
+        return_value=_GRAPH_METRICS,
+    ) as collector:
+        yield collector
 
 
 def _deployment(name):
@@ -283,7 +310,8 @@ async def test_down_deployments_are_surfaced_not_silently_healthy():
 
 
 @pytest.mark.asyncio
-async def test_healthy_deployments_report_success():
+@pytest.mark.parametrize("topic_sync_enabled", [True, False])
+async def test_healthy_deployments_report_success(topic_sync_enabled):
     fleet = {nm: ("last run: Completed", "healthy") for nm in FLEET_DEPLOYMENTS}
     with (
         patch(
@@ -294,6 +322,10 @@ async def test_healthy_deployments_report_success():
         patch("maia.heartbeat.flow.collect_pipeline_metrics", return_value=_METRICS),
         patch("maia.heartbeat.flow.check_audio_api_health", return_value=("healthy", "ok")),
         patch("maia.heartbeat.flow.quota_exhausted_agents", return_value=[]),
+        patch(
+            "maia.heartbeat.flow.get_settings",
+            return_value=MagicMock(TOPIC_SYNC_ENABLED=topic_sync_enabled),
+        ),
         patch("maia.heartbeat.flow.notifier") as mock_notifier,
     ):
         mock_notifier.send = AsyncMock(return_value=True)
@@ -302,3 +334,61 @@ async def test_healthy_deployments_report_success():
     assert summary["healthy"] is True
     assert summary["deployments_down"] == []
     assert mock_notifier.send.await_args.kwargs["level"] == AlertLevel.SUCCESS
+    assert summary["knowledge_graph"] == _GRAPH_METRICS
+    assert summary["topic_sync_enabled"] is topic_sync_enabled
+    graph = mock_notifier.send.await_args.kwargs["fields"]["Knowledge graph"]
+    assert f"Backfill: **{'enabled' if topic_sync_enabled else 'paused'}**" in graph
+    assert "Wikipedia topics: **3** · Topic links: **150**" in graph
+    assert "Videos checked: **75 / 100 (75.0%)**" in graph
+    assert "Channels checked: **10 / 20 (50.0%)**" in graph
+    assert "Checked (1h): **9 videos** · **3 channels**" in graph
+    assert "No topics: **4** · Unavailable: **2**" in graph
+    assert f"<t:{int(_GRAPH_METRICS['latest_observed'].timestamp())}:R>" in graph
+    assert len(graph) <= 1024
+
+
+def test_empty_graph_reports_first_check_and_paused_backfill():
+    metrics = {key: 0 for key in _GRAPH_METRICS}
+    metrics["latest_observed"] = None
+    graph = _knowledge_graph_field(metrics, enabled=False)
+    assert "Backfill: **paused**" in graph
+    assert "Videos checked: **0 / 0 (0.0%)**" in graph
+    assert "Channels checked: **0 / 0 (0.0%)**" in graph
+    assert "awaiting first check" in graph
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failed_collector", ["graph", "pipeline"])
+async def test_metrics_failure_preserves_other_reporting(graph_metrics, failed_collector):
+    error = RuntimeError("private database details")
+    pipeline = AsyncMock(return_value=_METRICS)
+    if failed_collector == "graph":
+        graph_metrics.side_effect = error
+    else:
+        pipeline.side_effect = error
+    with (
+        patch(
+            "maia.heartbeat.flow.collect_service_status",
+            return_value={"pleiades-ingestion": ("active", "healthy")},
+        ),
+        patch("maia.heartbeat.flow.collect_pipeline_metrics", pipeline),
+        patch("maia.heartbeat.flow.check_audio_api_health", return_value=("healthy", "ok")),
+        patch("maia.heartbeat.flow.quota_exhausted_agents", return_value=[]),
+        patch("maia.heartbeat.flow.notifier") as notifier,
+    ):
+        notifier.send = AsyncMock(return_value=True)
+        summary = await heartbeat_operation()
+
+    assert summary["notified"] is True
+    assert summary["healthy"] is True
+    fields = notifier.send.await_args.kwargs["fields"]
+    assert "private database details" not in str(fields)
+    if failed_collector == "graph":
+        assert summary["knowledge_graph"] is None
+        assert "Topic metrics unavailable" in fields["Knowledge graph"]
+        assert "Videos: **0**" in fields["Content"]
+        assert notifier.send.await_args.kwargs["level"] == AlertLevel.INFO
+    else:
+        assert summary["knowledge_graph"] == _GRAPH_METRICS
+        assert "Videos: **?**" in fields["Content"]
+        assert "Topic links: **150**" in fields["Knowledge graph"]

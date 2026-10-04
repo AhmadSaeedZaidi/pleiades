@@ -11,8 +11,10 @@ import subprocess
 from typing import Any
 
 import httpx
+from atlas.config import get_settings
 from atlas.notifications import AlertChannel, AlertLevel, notifier
 from atlas.repositories import VideoRepository
+from atlas.repositories.topics import TopicRepository
 from atlas.state import quota_exhausted_agents
 from prefect import flow
 from prefect.client.orchestration import get_client
@@ -148,6 +150,11 @@ async def collect_pipeline_metrics() -> dict[str, Any]:
     return dict[str, Any](await VideoRepository().pipeline_snapshot())
 
 
+async def collect_knowledge_graph_metrics() -> dict[str, Any]:
+    """Read topic coverage without calling YouTube or running enrichment."""
+    return await TopicRepository().heartbeat_snapshot()
+
+
 async def check_audio_api_health() -> tuple[str, str]:
     """Probe the configured speech-to-text endpoint for liveness.
 
@@ -267,6 +274,31 @@ def _build_fields(services: dict[str, tuple[str, str]], metrics: dict[str, Any])
     }
 
 
+def _knowledge_graph_field(metrics: dict[str, Any] | None, *, enabled: bool) -> str:
+    backfill = f"Backfill: **{'enabled' if enabled else 'paused'}**"
+    if metrics is None:
+        return f"{backfill}\n⚠ Topic metrics unavailable"
+
+    def coverage(kind: str) -> str:
+        checked, total = metrics[f"{kind}_checked"], metrics[f"{kind}_total"]
+        percent = checked / total * 100 if total else 0.0
+        return f"**{checked:,} / {total:,} ({percent:.1f}%)**"
+
+    latest = metrics["latest_observed"]
+    last_check = f"<t:{int(latest.timestamp())}:R>" if latest else "awaiting first check"
+    links = metrics["video_edges"] + metrics["channel_edges"]
+    return (
+        f"{backfill}\n"
+        f"Wikipedia topics: **{metrics['topic_count']:,}** · Topic links: **{links:,}**\n"
+        f"Videos checked: {coverage('video')}\n"
+        f"Channels checked: {coverage('channel')}\n"
+        f"Checked (1h): **{metrics['video_checked_1h']:,} videos** · "
+        f"**{metrics['channel_checked_1h']:,} channels**\n"
+        f"No topics: **{metrics['empty']:,}** · Unavailable: **{metrics['unavailable']:,}**\n"
+        f"Last check: {last_check}"
+    )
+
+
 async def heartbeat_operation(*, include_prefect: bool = False) -> dict[str, Any]:
     """Collect status, post to Discord, and return a summary dict.
 
@@ -297,6 +329,15 @@ async def heartbeat_operation(*, include_prefect: bool = False) -> dict[str, Any
             "ingested_1h": "?",
         }
 
+    graph_metrics = None
+    try:
+        # Bound pool acquisition as well as the repository's SQL execution.
+        async with asyncio.timeout(8):
+            graph_metrics = await collect_knowledge_graph_metrics()
+    except Exception as error:  # noqa: BLE001 - keep the rest of the heartbeat available
+        logger.warning("Could not collect topic metrics (%s)", type(error).__name__)
+    topic_sync_enabled = get_settings().TOPIC_SYNC_ENABLED
+
     # Audio transcription API liveness (Grok STT / Mistral Voxtral).
     try:
         audio_status, audio_detail = await check_audio_api_health()
@@ -308,6 +349,7 @@ async def heartbeat_operation(*, include_prefect: bool = False) -> dict[str, Any
     rate_limited = quota_exhausted_agents()
 
     fields = _build_fields(services, metrics)
+    fields["Knowledge graph"] = _knowledge_graph_field(graph_metrics, enabled=topic_sync_enabled)
     audio_icons = {"healthy": "🟢", "degraded": "🟡", "down": "🔴"}
     fields["Audio API"] = f"{audio_icons.get(audio_status, '🔴')} {audio_detail}"
     if rate_limited:
@@ -350,7 +392,7 @@ async def heartbeat_operation(*, include_prefect: bool = False) -> dict[str, Any
             + ", ".join(rate_limited)
             + " (transcription/API paused; alerts rate-limited)"
         )
-    elif degraded or audio_status != "healthy" or deployments_warn:
+    elif degraded or audio_status != "healthy" or deployments_warn or graph_metrics is None:
         level = AlertLevel.INFO
         status_word = "Online"
         extra = []
@@ -362,6 +404,8 @@ async def heartbeat_operation(*, include_prefect: bool = False) -> dict[str, Any
             )
         if audio_status != "healthy":
             extra.append(f"audio API {audio_status}")
+        if graph_metrics is None:
+            extra.append("knowledge graph metrics unavailable")
         description = "Online — " + "; ".join(extra)
     else:
         level = AlertLevel.SUCCESS
@@ -388,6 +432,8 @@ async def heartbeat_operation(*, include_prefect: bool = False) -> dict[str, Any
         "degraded": degraded,
         "notified": notified,
         "metrics": metrics,
+        "knowledge_graph": graph_metrics,
+        "topic_sync_enabled": topic_sync_enabled,
     }
     logger.info(
         f"Heartbeat sent: {status_word} "

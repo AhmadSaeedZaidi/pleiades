@@ -187,3 +187,30 @@ async def test_graph_query_bounds_and_literal_search(graph_pool):
     )
     assert (await reader.graph(search="%"))["topics"] == []
     assert (await reader.graph(search="' OR 1=1 --"))["nodes"] == []
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_coverage_distinguishes_unobserved_empty_unavailable_and_purged(graph_pool):
+    repo = TopicRepository(graph_pool)
+    await snapshot(graph_pool, [URL])
+    await snapshot(graph_pool, [], kind="channel", key="c1")
+    async with graph_pool.get_connection() as conn:
+        await conn.execute("""INSERT INTO videos(id,title,channel_id)
+            VALUES ('unseen','Unobserved','c1'),('gone','Unavailable','c1');
+            INSERT INTO youtube_topic_sync(kind,resource_id,observed_at,outcome)
+            VALUES ('video','gone',now()-interval '2 hours','unavailable'),
+                   ('video','purged',now(),'unavailable');""")
+    result = await repo.heartbeat_snapshot()
+    assert (result["video_total"], result["video_checked"]) == (3, 2)
+    assert (result["channel_total"], result["channel_checked"]) == (1, 1)
+    assert (result["video_checked_1h"], result["channel_checked_1h"]) == (1, 1)
+    assert (result["topic_count"], result["video_edges"], result["channel_edges"]) == (1, 1, 0)
+    assert (result["empty"], result["unavailable"]) == (1, 1)
+    assert result["latest_observed"] is not None
+    # Deleting a parent leaves a queue row until claim cleanup, not current coverage.
+    async with graph_pool.get_connection() as conn:
+        await conn.execute("DELETE FROM videos WHERE id='v1'")
+    result = await repo.heartbeat_snapshot()
+    assert (result["video_total"], result["video_checked"]) == (2, 1)
+    assert result["video_checked_1h"] == 0
+    assert result["video_edges"] == 0

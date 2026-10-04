@@ -68,6 +68,23 @@ Exports identify `pleiades.topic-graph.v1`, `sampled: true`, and whether the vie
 uses demo data. They contain included nodes and provenance-bearing edges, not
 the whole database.
 
+## Discord heartbeat
+
+The existing fifteen-minute OPS heartbeat includes a **Knowledge graph** field:
+Wikipedia topic and topic-link counts, checked videos/channels and their share
+of the current collection, checks within the last hour, empty/unavailable
+outcomes, and the latest observation time. Checks include resources whose API
+response has no topics or is unavailable; coverage does not imply classification.
+Recent counts describe resources whose latest check was within the hour, not
+API request counts. Purged resources are excluded from coverage.
+
+The field reports whether `TOPIC_SYNC_ENABLED` enables background backfill.
+This setting does not imply that a particular cycle is healthy. Pausing backfill
+preserves reported counts and normal metadata collection. A read-only snapshot
+uses a five-second SQL timeout and an eight-second collection deadline. Missing
+tables, timeouts or database errors show **Topic metrics unavailable** while
+the rest of the heartbeat continues. Reporting calls no YouTube/vault API.
+
 ## Activation and verification
 
 Apply only the reviewed additive migration to an existing installation; do not
