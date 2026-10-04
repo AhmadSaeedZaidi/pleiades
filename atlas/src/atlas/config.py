@@ -34,6 +34,7 @@ class Settings(BaseSettings):  # type: ignore[misc]
 
     KEY_POOL_ARCHEOLOGY_SIZE: int = Field(1, description="Keys reserved for archeology")
     KEY_POOL_TRACKING_SIZE: int = Field(1, description="Keys reserved for tracking")
+    KEY_POOL_GRAPHER_SIZE: int = Field(1, ge=1, description="Exclusive keys reserved for Grapher")
 
     DISCORD_WEBHOOK_ALERTS: SecretStr | None = None
     DISCORD_WEBHOOK_HUNT: SecretStr | None = None
@@ -269,21 +270,35 @@ class Settings(BaseSettings):  # type: ignore[misc]
 
     @property
     def key_rings(self) -> dict[str, list[str]]:
-        raw_keys = self.api_keys
+        # Deduplicate before assigning rings so Grapher's key cannot leak into
+        # another pool through a repeated credential in the configured list.
+        all_keys = list(dict.fromkeys(self.api_keys))
+        grapher_count = min(self.KEY_POOL_GRAPHER_SIZE, max(0, len(all_keys) - 1))
+        grapher_keys = all_keys[-grapher_count:] if grapher_count else []
+        raw_keys = all_keys[: len(all_keys) - grapher_count]
         total_keys = len(raw_keys)
         tracking_size, archeology_size = self.effective_pool_sizes()
+        # Scheduled discovery/tracking take precedence over manual Archeologist.
+        # Clamp old cached allocations after reserving Grapher's exclusive slice.
+        archeology_size = min(max(0, archeology_size), max(0, total_keys - 2))
+        tracking_size = min(max(1, tracking_size), max(1, total_keys - archeology_size - 1))
         reserved_count = archeology_size + tracking_size
 
         if total_keys <= reserved_count:
             logger.warning(
                 f"Config: Insufficient keys for strict pooling! "
                 f"Need > {reserved_count}, got {total_keys}. "
-                "Enabling CHAOS MODE (Shared Pools)."
+                "Main pools share available keys; Grapher's reserve stays exclusive."
             )
-            return {"hunting": raw_keys, "tracking": raw_keys, "archeology": raw_keys}
+            return {
+                "hunting": raw_keys,
+                "tracking": raw_keys,
+                "archeology": raw_keys,
+                "grapher": grapher_keys,
+            }
 
-        archeology_keys = raw_keys[-archeology_size:]
-        remaining = raw_keys[:-archeology_size]
+        archeology_keys = raw_keys[-archeology_size:] if archeology_size else []
+        remaining = raw_keys[: total_keys - archeology_size]
 
         # Hunter keeps the bulk (its 100/day search.list bucket rate-limits
         # first); tracking is the cheap videos.list ring with a protected slice.
@@ -292,6 +307,7 @@ class Settings(BaseSettings):  # type: ignore[misc]
         tracking_keys = remaining[hunting_size:]
 
         return {
+            "grapher": grapher_keys,
             "hunting": hunting_keys,
             "tracking": tracking_keys,
             "archeology": archeology_keys,

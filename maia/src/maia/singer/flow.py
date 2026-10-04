@@ -87,7 +87,13 @@ async def store_audio_task(video: Video) -> list[tuple[str, str, bytes]] | None:
     tmpdir = tempfile.mkdtemp(prefix="singer-audio-")
     try:
         raw_path = Path(tmpdir) / Path(video.raw_uri).name
-        materialized = await asyncio.to_thread(v.fetch_binary_to_path, video.raw_uri, raw_path)
+        try:
+            materialized = await asyncio.to_thread(v.fetch_binary_to_path, video.raw_uri, raw_path)
+        except Exception as error:
+            # Disk-full, auth and transport errors do not prove the raw is gone.
+            run_logger.warning("Audio source materialization deferred (%s)", type(error).__name__)
+            await VideoRepository().release_audio_to_pending(vid_id)
+            return None
         if not materialized:
             run_logger.error(
                 f"Raw artifact missing for {vid_id} at {video.raw_uri} — marking failed"

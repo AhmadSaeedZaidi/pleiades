@@ -207,6 +207,7 @@ async def heartbeat_operation(*, include_prefect: bool = False) -> dict[str, Any
         if settings.MISTRAL_API_KEY
         else "No transcription API key configured"
     ) + " (configuration only; no API probe)"
+    audio_configuration += f"\nGrapher key pool: **{len(settings.key_rings['grapher'])}**"
     workers = cycle_monitor.snapshot()
     rate_limited = None
     try:

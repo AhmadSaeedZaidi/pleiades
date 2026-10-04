@@ -175,6 +175,24 @@ async def test_store_audio_timeout_retries_only_audio_step():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error", [OSError(28, "No space left on device"), TimeoutError("download timeout")]
+)
+async def test_materialization_failure_keeps_audio_retryable(error):
+    video = Video(id="VIDEO_001", title="Test Video", raw_uri="raw/VIDEO_001.webm")
+    with (
+        patch("maia.singer.flow.VideoRepository") as repository,
+        patch("maia.singer.flow.get_vault") as vault,
+    ):
+        repository.return_value.release_audio_to_pending = AsyncMock()
+        repository.return_value.mark_step_failed = AsyncMock()
+        vault.return_value.fetch_binary_to_path.side_effect = error
+        assert await store_audio_task(video) is None
+    repository.return_value.release_audio_to_pending.assert_awaited_once_with("VIDEO_001")
+    repository.return_value.mark_step_failed.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_store_audio_read_failure_releases_audio_step():
     """An unreadable FFmpeg output must not strand audio in PROCESSING."""
     video = Video(id="VIDEO_001", title="Test Video", raw_uri="raw/VIDEO_001.webm")

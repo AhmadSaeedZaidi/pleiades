@@ -30,9 +30,11 @@ Related topics in a view share sampled videos; no topic-to-topic facts are inven
 
 ## Bounded backfill
 
-The ninth scheduler operation runs every ten minutes. A cycle services both
+Grapher, the ninth scheduled Maia agent, runs every ten minutes. A cycle services both
 videos and channels, with at most four requests of fifty IDs each. It uses the
-hunting key pool, leaving tracking capacity protected. The Data API list methods
+exclusive `grapher` key pool (`KEY_POOL_GRAPHER_SIZE=1`), leaving discovery
+and tracking keys separate. The reserve is removed before dynamic main-pool
+allocation; Grapher never falls back to the hunting ring. The Data API list methods
 cost one quota unit per request; retries can consume additional quota. New
 metadata requests collect topics without an additional request.
 
@@ -47,7 +49,7 @@ YouTube executor; different keys need not imply independent project quota.
 Set `TOPIC_SYNC_ENABLED=false` to disable backfill. A manual bounded cycle is:
 
 ```bash
-python -m maia.topics --batch-size 50 --max-batches 4
+python -m maia grapher --batch-size 50 --max-batches 4
 ```
 
 This calls YouTube and writes the configured database. It is an operator command,

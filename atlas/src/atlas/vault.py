@@ -36,7 +36,7 @@ try:
         HfApi,
         hf_hub_download,
     )
-    from huggingface_hub.errors import EntryNotFoundError
+    from huggingface_hub.errors import EntryNotFoundError, LocalEntryNotFoundError
 
     HAS_HF = True
     HAS_PANDAS = True
@@ -785,9 +785,14 @@ class HuggingFaceVault(VaultStrategy):
                 else:
                     source.replace(destination)
             return True
-        except Exception as e:
-            logger.warning(f"Failed to materialize binary {path} from HF vault: {e}")
+        except LocalEntryNotFoundError:
+            # A failed local cache lookup is not evidence of a missing remote object.
+            raise
+        except EntryNotFoundError:
             return False
+        except Exception as error:
+            logger.warning("HF materialization failed (%s)", type(error).__name__)
+            raise
 
     def append_metrics(
         self,
@@ -995,9 +1000,9 @@ class GCSVault(VaultStrategy):
                 return False
             blob.download_to_filename(str(destination))
             return True
-        except Exception as e:
-            logger.warning(f"Failed to materialize binary {path} from GCS vault: {e}")
-            return False
+        except Exception as error:
+            logger.warning("GCS materialization failed (%s)", type(error).__name__)
+            raise
 
     def append_metrics(
         self,

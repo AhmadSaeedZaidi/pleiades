@@ -302,7 +302,7 @@ async def test_stage_failures_are_not_a_false_all_clear(reporting):
     )
     summary = await heartbeat_operation()
     assert not summary["healthy"] and summary["executor_online"]
-    assert "5 stage failures; 2 legacy failed records" in summary["issues"]
+    assert "5 videos with failed stages; 2 legacy failed records" in summary["issues"]
     assert reporting[2].await_args.kwargs["level"] == AlertLevel.WARNING
 
 

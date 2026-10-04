@@ -13,7 +13,7 @@ Agent operations for the YouTube pipeline. The live process is
 | Tracker: engagement | 60 seconds | 50 |
 | Heartbeat: operator reporting | 900 seconds | — |
 | Janitor: persistence/retention | 900 seconds | operation-specific |
-| Topics: Wikipedia classifications | 600 seconds | 4 × 50 IDs |
+| Grapher: Wikipedia classifications | 600 seconds | 4 × 50 IDs |
 
 Cadences include operation runtime. Archeologist and Muralist/full clips remain
 manual. The scheduler calls plain `*_operation` functions and isolates cycle

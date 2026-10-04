@@ -24,7 +24,8 @@ from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from typing import Any
 
-# In-process application operations corresponding to the prefect.yaml adapters.
+# Plain operations own live cadence; Prefect flows remain optional adapters.
+from maia.grapher.flow import grapher_operation
 from maia.heartbeat.flow import heartbeat_operation
 from maia.hunter.flow import hunter_operation
 from maia.janitor.flow import janitor_operation
@@ -33,7 +34,6 @@ from maia.scribe.flow import scribe_operation
 from maia.singer.flow import singer_operation
 from maia.streamer.flow import streamer_operation
 from maia.telemetry import cycle_monitor
-from maia.topics import topics_operation
 from maia.tracker.flow import tracker_operation
 
 logger = logging.getLogger("maia.orchestrator")
@@ -64,7 +64,7 @@ def build_specs() -> list[CycleSpec]:
         CycleSpec("tracker", tracker_operation, 60, {"batch_size": 50}, 3.0),
         CycleSpec("heartbeat", heartbeat_operation, 900, {}, 3.6),
         CycleSpec("janitor", janitor_operation, 900, {"dry_run": False}, 4.2),
-        CycleSpec("topics", topics_operation, 600, {"batch_size": 50, "max_batches": 4}, 4.8),
+        CycleSpec("grapher", grapher_operation, 600, {"batch_size": 50, "max_batches": 4}, 4.8),
     ]
 
 

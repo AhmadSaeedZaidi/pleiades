@@ -1,5 +1,7 @@
 """Tests for configuration module."""
 
+import json
+
 import pytest
 from pydantic import ValidationError
 
@@ -50,8 +52,48 @@ def test_api_keys_compliance_mode_preserves_rotation(monkeypatch):
 
     # Key rings are still split into multiple non-empty pools.
     rings = settings.key_rings
-    assert set(rings) == {"hunting", "tracking", "archeology"}
-    assert all(len(v) >= 1 for v in rings.values())
+    assert set(rings) == {"hunting", "tracking", "archeology", "grapher"}
+    assert all(len(rings[name]) >= 1 for name in ("hunting", "tracking", "grapher"))
+
+
+@pytest.mark.parametrize("count", [1, 2, 3, 4, 12])
+def test_grapher_ring_is_exclusive_even_with_stale_allocation(monkeypatch, count):
+    from atlas.config import Settings
+    from atlas.key_pool import PoolSizes
+
+    keys = [f"key-{n}" for n in range(count)]
+    monkeypatch.setattr("atlas.key_pool.load_override", lambda: PoolSizes(20, 20))
+    settings = Settings(_env_file=None, YOUTUBE_API_KEY_POOL_JSON=json.dumps(keys))
+    rings = settings.key_rings
+    assert len(rings["grapher"]) == (1 if count > 1 else 0)
+    others = set().union(*(rings[name] for name in ("hunting", "tracking", "archeology")))
+    assert not set(rings["grapher"]) & others
+    assert set(rings["grapher"]) | others == set(keys)
+    assert rings["hunting"] and rings["tracking"]
+
+
+def test_three_keys_keep_discovery_and_tracking_and_reassign_manual_reserve(monkeypatch):
+    from atlas.config import Settings
+
+    monkeypatch.setattr("atlas.key_pool.load_override", lambda: None)
+    settings = Settings(_env_file=None, YOUTUBE_API_KEY_POOL_JSON='["hunt", "track", "graph"]')
+    assert settings.key_rings == {
+        "hunting": ["hunt"],
+        "tracking": ["track"],
+        "grapher": ["graph"],
+        "archeology": [],
+    }
+
+
+def test_duplicate_keys_cannot_cross_the_grapher_boundary(monkeypatch):
+    from atlas.config import Settings
+
+    monkeypatch.setattr("atlas.key_pool.load_override", lambda: None)
+    settings = Settings(
+        _env_file=None, YOUTUBE_API_KEY_POOL_JSON='["hunt", "track", "graph", "graph"]'
+    )
+    assert settings.key_rings["grapher"] == ["graph"]
+    assert "graph" not in settings.key_rings["hunting"] + settings.key_rings["tracking"]
 
 
 def test_api_keys_json_parsing(monkeypatch):

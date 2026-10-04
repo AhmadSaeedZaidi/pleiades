@@ -7,6 +7,7 @@ enabling polymorphic command dispatch through the main entry point.
 
 from maia.agent import Agent
 from maia.archeologist.flow import ArcheologistAgent
+from maia.grapher.flow import GrapherAgent
 from maia.heartbeat.flow import HeartbeatAgent
 from maia.hunter.flow import HunterAgent
 from maia.janitor.flow import JanitorAgent
@@ -18,6 +19,7 @@ from maia.streamer.flow import StreamerAgent
 from maia.tracker.flow import TrackerAgent
 
 AGENT_REGISTRY: dict[str, type[Agent]] = {
+    "grapher": GrapherAgent,
     "hunter": HunterAgent,
     "tracker": TrackerAgent,
     "janitor": JanitorAgent,

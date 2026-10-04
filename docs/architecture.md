@@ -20,7 +20,7 @@ flowchart LR
 The optional MCP server serves on-demand client requests independently.
 
 `maia.orchestrator` schedules nine plain async operations: Streamer, Singer,
-Painter, Scribe, Hunter, Tracker, Heartbeat, Janitor, and Topics. A failed cycle is logged
+Painter, Scribe, Hunter, Tracker, Heartbeat, Janitor, and Grapher. A failed cycle is logged
 and isolated; other loops continue. Initial jitter spreads startup work.
 Signals drain the scheduler according to the
 [contract](implementation-checklists/orchestrator-contract.md).

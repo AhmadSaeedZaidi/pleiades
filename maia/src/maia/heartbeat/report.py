@@ -14,7 +14,7 @@ def _age(seconds: float) -> str:
 
 
 def _knowledge_graph_field(metrics: dict[str, Any] | None, *, enabled: bool) -> str:
-    backfill = f"Backfill: **{'enabled' if enabled else 'paused'}**"
+    backfill = f"Backfill: **{'enabled' if enabled else 'paused'}** · Agent: Grapher"
     if metrics is None:
         return f"{backfill}\n⚠ Topic metrics unavailable"
 
@@ -90,6 +90,7 @@ def build_report(
         sc = pipeline["status_counts"]
         failed = int(pipeline.get("failed_steps", 0))
         legacy = int(sc.get("FAILED", 0))
+        overlap = int(pipeline.get("failed_overlap", 0))
         breakdown = (
             ", ".join(
                 f"{key}={value:,}"
@@ -102,10 +103,11 @@ def build_report(
             f"Videos: **{pipeline['total']:,}** · New (1h): **{pipeline['ingested_1h']:,}**\n"
             f"Pending: {sc.get('PENDING', 0):,} · Processing: {sc.get('PROCESSING', 0):,}\n"
             f"Processed: {sc.get('PROCESSED', 0):,} · Archived: {sc.get('ARCHIVED', 0):,}\n"
-            f"Stage failures: **{failed:,}** ({breakdown})\nLegacy failed records: **{legacy:,}**"
+            f"Videos with failed stages: **{failed:,}** ({breakdown})\n"
+            f"Legacy failed records: **{legacy:,}** · Overlap: **{overlap:,}**"
         )
         if failed or legacy:
-            issues.append(f"{failed:,} stage failures; {legacy:,} legacy failed records")
+            issues.append(f"{failed:,} videos with failed stages; {legacy:,} legacy failed records")
         fields["Tracking"] = (
             f"Updated (1h): **{pipeline.get('tracked_1h', 0):,}** · "
             f"(24h): **{pipeline.get('tracked_24h', 0):,}**\n"

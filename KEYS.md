@@ -7,6 +7,7 @@ store. This tracked document contains configuration names only.
 | --- | --- |
 | `DATABASE_URL` | Pipeline PostgreSQL connection |
 | `YOUTUBE_API_KEY_POOL_JSON` | Data API key pool |
+| `KEY_POOL_GRAPHER_SIZE` | Exclusive graph-enrichment reserve, default 1 key |
 | `HF_DATASET_ID`, `HF_TOKEN` | Artifact vault location and token |
 | `YOUTUBE_COOKIES_PATH` | Local YouTube cookie file |
 | `MISTRAL_API_KEY`, `GROK_API_KEY` | Optional transcription/summary providers |

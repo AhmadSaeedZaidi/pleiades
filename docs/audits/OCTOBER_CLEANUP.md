@@ -259,3 +259,34 @@ bounded statement/lock timeouts. Planner counts are now refreshed and dead
 space reusable. The reviewed maintenance migration lowers per-table vacuum and
 analyze scale factors to 2%, including transcript TOAST. It is live and preserves
 rows. No blocking full-table rewrite or filesystem shrink was performed.
+
+
+## Failure cohorts and Grapher (October 4 follow-up)
+
+The heartbeat initially exposed 554 videos with at least one failed stage:
+276 raw, 62 audio and 216 visual failures. It also exposed 2,595 legacy
+whole-video `FAILED` rows. These sets overlap by 493 rows, so they represent
+2,656 distinct affected videos rather than 3,149. The phase failure markers
+do not retain individual error causes. Many affected videos already have
+transcripts; failure counts are not data-loss counts or new incidents per cycle.
+
+Retained logs match 57 audio-failed videos to local ENOSPC errors during media
+download. The Hugging Face materialization helper caught all errors and returned
+false; Singer interpreted false as missing remote media and made the stage
+terminal. The helper now distinguishes confirmed remote absence from local
+cache, disk, auth and transport failures. Retryable materialization errors
+release only audio to pending. Tests cover disk-full, interruption, confirmed
+absence and the local-cache exception hierarchy. A bounded repository recovery
+method selects explicit IDs and refuses legacy whole-video failures, changed or
+completed audio, and rows without fetched raw input; it does not delete artifacts.
+
+Current raw fetch logs also show YouTube/yt-dlp's “page needs to be reloaded”
+errors, while retained visual logs include download failures. Historical flags
+cannot establish the exact cause of every older row. They should not be cleared
+or bulk-replayed simply to produce a green report.
+
+Graph enrichment is now the registered [Grapher Maia agent](../knowledge-graph.md),
+with an exclusive fixed key reserve before main-pool allocation. The server's
+three unique keys become one discovery, one tracking and one Grapher key.
+The reserve comes from manual Archeologist capacity; that agent needs an
+additional key for manual operation. Grapher never borrows hunting keys.

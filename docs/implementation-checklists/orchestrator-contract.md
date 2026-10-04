@@ -52,7 +52,7 @@ durable work state. The orchestrator never talks to the video DB directly.
 | tracker | `tracker_operation` | 60 | `{"batch_size": 50}` | 3.0 |
 | heartbeat | `heartbeat_operation` | 900 | `{}` | 3.6 |
 | janitor | `janitor_operation` | 900 | `{"dry_run": False}` | 4.2 |
-| topics | `topics_operation` | 600 | `{"batch_size": 50, "max_batches": 4}` | 4.8 |
+| grapher | `grapher_operation` | 600 | `{"batch_size": 50, "max_batches": 4}` | 4.8 |
 
 ---
 

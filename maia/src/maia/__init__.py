@@ -9,6 +9,7 @@ __license__ = "MIT"
 
 # Preserve public convenience imports without loading every agent on import maia.
 _EXPORTS = {
+    "GrapherAgent": "grapher",
     "HunterAgent": "hunter",
     "TrackerAgent": "tracker",
     "JanitorAgent": "janitor",

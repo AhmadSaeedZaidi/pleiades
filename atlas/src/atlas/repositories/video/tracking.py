@@ -154,6 +154,8 @@ class VideoTrackingMixin(DatabaseAdapter):
         failed_step_rows = await self._fetch_all(
             """
             SELECT
+                COUNT(*) AS failed_videos,
+                COUNT(*) FILTER (WHERE status = 'FAILED') AS failed_overlap,
                 COUNT(*) FILTER (WHERE raw_phase = 'FAILED') AS raw,
                 COUNT(*) FILTER (WHERE audio_phase = 'FAILED') AS audio,
                 COUNT(*) FILTER (WHERE visuals_phase = 'FAILED') AS visuals,
@@ -172,20 +174,9 @@ class VideoTrackingMixin(DatabaseAdapter):
             step: int(failed_row.get(step, 0) or 0)
             for step in ("raw", "audio", "visuals", "transcript", "clip")
         }
-        # A video can fail more than one stage; count distinct videos, not stages.
-        failed_videos = (
-            await self._fetch_scalar(
-                """
-            SELECT COUNT(*) FROM videos
-            WHERE raw_phase = 'FAILED'
-               OR audio_phase = 'FAILED'
-               OR visuals_phase = 'FAILED'
-               OR transcript_phase = 'FAILED'
-               OR clip_phase = 'FAILED'
-            """
-            )
-            or 0
-        )
+        # The same aggregate counts affected videos once and exposes overlap
+        # with legacy whole-video failures, avoiding a second table scan.
+        failed_videos = int(failed_row.get("failed_videos", 0) or 0)
 
         transcripts = await self._fetch_scalar("SELECT COUNT(*) FROM transcripts") or 0
         stats_log_size = await self._fetch_scalar("SELECT COUNT(*) FROM video_stats_log") or 0
@@ -201,6 +192,7 @@ class VideoTrackingMixin(DatabaseAdapter):
             "status_counts": status_counts,
             "failed_step_counts": failed_step_counts,
             "failed_steps": failed_videos,
+            "failed_overlap": int(failed_row.get("failed_overlap", 0) or 0),
             "transcripts": transcripts,
             "with_visuals": agg.get("with_visuals") or 0,
             "audios": agg.get("audios") or 0,

@@ -1,8 +1,14 @@
 # API and network resilience
 
 `YOUTUBE_API_KEY_POOL_JSON` supplies the key pool. `settings.key_rings` partitions
-it into hunting, tracking, and archeology rings. Dynamic allocation uses corpus
-size while preserving tracking capacity. Key quotas can share a project-level
+it into hunting, tracking, archeology and Grapher rings. Grapher reserves one
+exclusive key by default (`KEY_POOL_GRAPHER_SIZE`), before dynamic main-pool
+allocation. Discovery and tracking take precedence over manual Archeologist
+when keys are scarce. With three unique keys the rings are one discovery, one
+tracking, one Grapher; Archeologist needs another key for manual execution.
+With only one unique key Grapher has no key and fails explicitly rather than
+borrowing discovery capacity. Dynamic allocation uses corpus size while
+preserving tracking capacity. Key quotas can share a project-level
 budget; rotating keys does not guarantee independent quota.
 
 `KeyRing.from_keys` is the supported constructor for an explicitly supplied pool.

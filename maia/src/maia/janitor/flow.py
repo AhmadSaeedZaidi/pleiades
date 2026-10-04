@@ -120,7 +120,9 @@ async def refresh_key_pools_task() -> dict[str, Any]:
     repo = VideoRepository()
 
     video_count = await repo.count_videos()
-    total_keys = len(settings.api_keys)
+    # Dynamic allocation applies only to the main pool. Grapher's fixed reserve
+    # is excluded and remains stable even when the weekly allocation changes.
+    total_keys = len(set(settings.api_keys)) - len(settings.key_rings["grapher"])
 
     sizes = await asyncio.to_thread(
         refresh_allocation,

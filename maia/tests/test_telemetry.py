@@ -55,9 +55,9 @@ def test_discord_nondelivery_and_cancellation_are_not_successful_cycles():
 
 def test_history_is_bounded_and_only_safe_integer_counters_survive():
     monitor = CycleMonitor(lambda: 1.0)
-    monitor.register("topics", 600)
+    monitor.register("grapher", 600)
     for _ in range(100):
-        monitor.start("topics")
-        monitor.finish("topics", {"observed": 1, "unavailable": True, "secret": "private"})
-    assert len(monitor.cycles["topics"].history) == 60
+        monitor.start("grapher")
+        monitor.finish("grapher", {"observed": 1, "unavailable": True, "secret": "private"})
+    assert len(monitor.cycles["grapher"].history) == 60
     assert monitor.snapshot()["cycles"][0]["progress_1h"] == {"observed": 60}

@@ -9,14 +9,14 @@ is collected only through the compatibility flow.
 The report includes:
 
 - Executor liveness and actual states of all nine scheduled workers, including
-  Topics. Failed, interrupted, late, and unusually long cycles are flagged.
-- Extraction totals, recent ingestion, per-stage failures and legacy failed records.
+  Grapher. Failed, interrupted, late, and unusually long cycles are flagged.
+- Extraction totals, recent ingestion, per-stage failures and legacy failed records, including their overlap.
 - Tracking updates, durable due work and SQL metric rows.
 - SQL size, staged and retained transcript payloads, verified handoffs and metric
   archival observed by this process, plus host disk usage and free space.
 - Wikipedia topic/link counts, checked video/channel coverage, recent checks,
   unavailable resources, and whether enrichment is enabled.
-- Configured transcription provider and recorded quota pauses. Configuration
+- Configured transcription provider, Grapher key-pool size and recorded quota pauses. Configuration
   is not proof that a credential or endpoint works.
 
 **Healthy** means the available observations have no flagged issues.

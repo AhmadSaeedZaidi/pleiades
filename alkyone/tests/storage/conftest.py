@@ -34,7 +34,12 @@ async def storage_pool():
                 status TEXT NOT NULL DEFAULT 'PROCESSED', discovered_at TIMESTAMPTZ DEFAULT now(),
                 last_updated_at TIMESTAMPTZ DEFAULT now(), archived_at TIMESTAMPTZ,
                 has_transcript BOOLEAN DEFAULT TRUE, has_audio BOOLEAN DEFAULT TRUE,
-                has_visuals BOOLEAN DEFAULT TRUE, vault_write_pending BOOLEAN DEFAULT FALSE
+                has_visuals BOOLEAN DEFAULT TRUE, vault_write_pending BOOLEAN DEFAULT FALSE,
+                fetched BOOLEAN DEFAULT FALSE, raw_uri TEXT,
+                last_tracked_at TIMESTAMPTZ, pipeline_phase TEXT,
+                raw_phase TEXT DEFAULT 'PENDING', audio_phase TEXT DEFAULT 'PENDING',
+                visuals_phase TEXT DEFAULT 'PENDING', transcript_phase TEXT DEFAULT 'PENDING',
+                clip_phase TEXT DEFAULT 'PENDING'
             );
             CREATE TABLE IF NOT EXISTS transcripts (
                 video_id VARCHAR(20) PRIMARY KEY REFERENCES videos(id), language TEXT,

@@ -45,7 +45,7 @@ _SCHEDULED_AGENTS = {
     "tracker",
     "heartbeat",
     "janitor",
-    "topics",
+    "grapher",
 }
 
 
@@ -366,6 +366,7 @@ def test_every_agent_package_is_a_real_package():
         "scribe",
         "singer",
         "heartbeat",
+        "grapher",
     ):
         init = root / agent / "__init__.py"
         assert init.is_file(), f"{agent} is missing __init__.py; wheel builds will omit it"
