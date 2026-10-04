@@ -23,9 +23,10 @@ Agents call Atlas repositories and storage/network collaborators. Vault operatio
 use a bounded executor; media subprocesses require ffmpeg, Deno and configured
 YouTube egress/cookies. Scribe stages transcripts; Janitor commits them.
 
-Discord heartbeats include knowledge graph topic/link counts, video/channel
-coverage, recent checks and the last observation time. Backfill can be paused
-independently; reporting reads PostgreSQL and consumes no YouTube quota.
+[Discord heartbeats](../docs/heartbeat.md) report actual scheduler cycles,
+extraction failures, tracking, verified storage progress, disk use, and knowledge
+graph coverage. Reporting reads bounded PostgreSQL snapshots and local state,
+consumes no YouTube quota, and keeps the 15-minute cadence.
 
 ```bash
 make -C maia test-unit

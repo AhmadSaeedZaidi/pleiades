@@ -26,6 +26,16 @@ from maia.orchestrator import (
 # fixture patches asyncio.sleep) so tests can yield to the event loop.
 _REAL_SLEEP = asyncio.sleep
 
+
+@pytest.fixture(autouse=True)
+def cycle_observations(monkeypatch):
+    from maia.telemetry import CycleMonitor
+
+    monitor = CycleMonitor()
+    monkeypatch.setattr("maia.orchestrator.cycle_monitor", monitor)
+    return monitor
+
+
 _SCHEDULED_AGENTS = {
     "streamer",
     "singer",
@@ -40,6 +50,17 @@ _SCHEDULED_AGENTS = {
 
 
 # --- build_specs: public surface ---
+
+
+@pytest.mark.asyncio
+async def test_scheduler_records_failure_then_recovery(cycle_observations):
+    cycle_observations.register("tracker", 60)
+    await run_cycle("tracker", AsyncMock(side_effect=RuntimeError("private details")))
+    assert cycle_observations.snapshot()["cycles"][0]["state"] == "failed"
+    await run_cycle("tracker", AsyncMock(return_value={"videos_updated": 5}))
+    row = cycle_observations.snapshot()["cycles"][0]
+    assert row["state"] == "idle" and row["failures"] == 0
+    assert row["progress_1h"] == {"videos_updated": 5}
 
 
 def test_build_specs_returns_scheduled_agents():

@@ -26,6 +26,7 @@ GUIDES = [
             "adaptive-scheduling",
             "tiered-storage",
             "knowledge-graph",
+            "heartbeat",
             "resiliency-strategy",
             "micro-prefect-orchestration",
         )

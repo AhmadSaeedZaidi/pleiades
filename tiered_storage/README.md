@@ -77,6 +77,24 @@ never overwrite objects that finalized receipts reference.
 
 ## Other backends
 
+The reusable unit is this package, not Atlas as a whole. Version 0.1 is a small
+handoff engine with a tested local backend, rather than a complete storage
+service. Its wheel works in a clean Python environment without Atlas, Maia,
+Prefect or Hugging Face installed, including reads after a process restart.
+
+| Ready here | Supplied by the integrating project |
+| --- | --- |
+| Digest verification and version-aware finalization | Backend-specific transactions and durability guarantees |
+| SQLite hot storage and filesystem cold storage | PostgreSQL, Hugging Face, GCS or other SDK adapters |
+| Bounded writes, bounded readback concurrency and retry-safe immutable paths | Scheduling, distributed leases, observability, backups and cold-object cleanup |
+
+Payloads are byte arrays in memory; there is no streaming API. The byte limit
+applies to transfer batches, not the entire memory footprint of selected rows.
+Choose selection limits for your record sizes. Adapter correctness matters:
+the engine cannot make an overwrite-prone cold backend immutable or an
+unconditional hot deletion version-safe. There is no cross-backend distributed
+transaction, automatic failover, or packaged remote-backend SDK integration.
+
 Implement the exported `HotStore` and `ColdStore` protocols:
 
 | Adapter | Methods | Required behavior |

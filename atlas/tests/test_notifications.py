@@ -40,7 +40,12 @@ async def test_send_reports_discord_delivery(
     notifier.hooks[AlertChannel.ALERTS] = MagicMock(
         get_secret_value=MagicMock(return_value="https://discord.invalid/webhook")
     )
-    monkeypatch.setattr("atlas.notifications.aiohttp.ClientSession", lambda: _Session(status))
+
+    def session(*, timeout):
+        assert timeout.total == 10
+        return _Session(status)
+
+    monkeypatch.setattr("atlas.notifications.aiohttp.ClientSession", session)
 
     assert await notifier.send("Status", "Details") is expected
 
@@ -51,3 +56,19 @@ async def test_send_reports_missing_webhook() -> None:
     notifier.hooks = {channel: None for channel in AlertChannel}
 
     assert await notifier.send("Status", "Details", AlertChannel.OPS) is False
+
+
+@pytest.mark.asyncio
+async def test_webhook_errors_do_not_expose_private_url(monkeypatch, caplog) -> None:
+    notifier = DiscordNotifier()
+    notifier.hooks[AlertChannel.ALERTS] = MagicMock(
+        get_secret_value=MagicMock(return_value="https://discord.invalid/private-token")
+    )
+
+    def fail_session(**kwargs):
+        raise RuntimeError("https://discord.invalid/private-token")
+
+    monkeypatch.setattr("atlas.notifications.aiohttp.ClientSession", fail_session)
+    assert await notifier.send("Status", "Details") is False
+    assert "RuntimeError" in caplog.text
+    assert "private-token" not in caplog.text

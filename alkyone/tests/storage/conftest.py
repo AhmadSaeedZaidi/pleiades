@@ -45,7 +45,11 @@ async def storage_pool():
                 comment_count BIGINT, timestamp TIMESTAMPTZ,
                 PRIMARY KEY(video_id, timestamp)
             );
-            TRUNCATE transcripts, video_stats_log, videos;
+            CREATE TABLE IF NOT EXISTS watchlist (
+                video_id VARCHAR(20) PRIMARY KEY REFERENCES videos(id),
+                next_track_at TIMESTAMPTZ, last_tracked_at TIMESTAMPTZ
+            );
+            TRUNCATE transcripts, video_stats_log, watchlist, videos;
             INSERT INTO videos(id,channel_id,title) VALUES ('V1','channel','example');
         """)
     yield pool

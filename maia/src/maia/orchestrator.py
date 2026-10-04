@@ -32,6 +32,7 @@ from maia.painter.flow import painter_operation
 from maia.scribe.flow import scribe_operation
 from maia.singer.flow import singer_operation
 from maia.streamer.flow import streamer_operation
+from maia.telemetry import cycle_monitor
 from maia.topics import topics_operation
 from maia.tracker.flow import tracker_operation
 
@@ -77,17 +78,22 @@ async def run_cycle(
     """Run one plain operation, isolating failures from the other cycles."""
     if jitter:
         await asyncio.sleep(jitter)
+    cycle_monitor.start(name)
     try:
         result = await operation(**(kwargs or {}))
+        cycle_monitor.finish(name, result)
         logger.info("orchestrator cycle %s complete: %s", name, result)
     except asyncio.CancelledError:
+        cycle_monitor.cancel(name)
         raise
-    except Exception:  # noqa: BLE001 - a failing cycle must not kill the loop
+    except Exception as error:  # noqa: BLE001 - a failing cycle must not kill the loop
+        cycle_monitor.finish(name, error=error)
         logger.exception("orchestrator cycle %s FAILED", name)
 
 
 async def agent_loop(spec: CycleSpec) -> None:
     """Run one agent forever with ``spec.interval`` between cycle attempts."""
+    cycle_monitor.register(spec.name, spec.interval)
     logger.info(
         "starting orchestrator cycle %s (interval=%ss, kwargs=%s)",
         spec.name,

@@ -1,7 +1,6 @@
 # Orchestrator Contract — `maia/src/maia/orchestrator.py`
 
-Status: **spec** (grounded in source at commit time; where the code is ambiguous the
-contract states the *intended* behavior and flags the discrepancy).
+Status: **current contract** (grounded in scheduler source and unit tests).
 Scope: cleanup-plan item 3(a). Companion tests: `maia/tests/test_orchestrator.py`.
 
 ---
@@ -49,13 +48,19 @@ durable work state. The orchestrator never talks to the video DB directly.
 | singer | `singer_operation` | 300 | `{"batch_size": 10}` | 0.6 |
 | painter | `painter_operation` | 120 | `{"batch_size": 5}` | 1.2 |
 | scribe | `scribe_operation` | 120 | `{"batch_size": 10}` | 1.8 |
-| hunter | `hunter_operation` | 300 | `{"batch_size": 10}` | 2.4 |
+| hunter | `hunter_operation` | 1200 | `{"batch_size": 1}` | 2.4 |
 | tracker | `tracker_operation` | 60 | `{"batch_size": 50}` | 3.0 |
-| archeologist | `archeology_operation` | 600 | `{"start_year": 2010, "end_year": 2024}` | 3.6 |
-| heartbeat | `heartbeat_operation` | 900 | `{}` | 4.2 |
-| janitor | `janitor_operation` | 900 | `{"dry_run": False}` | 4.8 |
+| heartbeat | `heartbeat_operation` | 900 | `{}` | 3.6 |
+| janitor | `janitor_operation` | 900 | `{"dry_run": False}` | 4.2 |
+| topics | `topics_operation` | 600 | `{"batch_size": 50, "max_batches": 4}` | 4.8 |
 
 ---
+
+Actual cycle starts, finishes, cancellations and failures are observed through
+`maia.telemetry.CycleMonitor`. This bounded process-local history adds no work
+state or scheduling. Cadence ages are measured from completion, avoiding false
+late warnings for normal sleep after a long cycle. The [heartbeat](../heartbeat.md)
+consumes these observations; they reset on restart.
 
 ## 3. Responsibilities (owned by the orchestrator)
 
@@ -81,22 +86,24 @@ durable work state. The orchestrator never talks to the video DB directly.
    (e.g. hunter/archeologist swallow YouTube daily-quota errors and retry next interval;
    streamer backs off via `atlas.state`).
 
-### Responsibility states
+### Observed cycle states
 
-The orchestrator has **no explicit state machine** — states are emergent from the loop:
+Scheduling still follows the same loop. The cycle monitor records observations
+without owning work, retries or persistence:
 
-| State | Meaning | Behavior |
-|-------|---------|----------|
-| **idle** | between cycles, in `asyncio.sleep(interval)` | loop is parked; no work dispatched |
-| **running** | `await operation(**kwargs)` in `run_cycle` | one agent's plain operation is executing in-process |
-| **failed** | coroutine raised `Exception` | caught + logged by `run_cycle`; loop continues |
-| **cap-reaching** | agent raised `QuotaExhaustedError` (or similar) | treated as a normal failure by `run_cycle`; retry deferred to the agent's own policy on the next interval |
+| State | Meaning |
+| --- | --- |
+| starting | registered, awaiting its first attempt |
+| running | a plain operation is executing |
+| idle | the previous cycle completed and the loop is waiting |
+| failed | an exception, partial failure, or Discord non-delivery was observed |
+| late | a cycle has not started within its completion-based cadence and grace |
+| slow | running longer than the configured reporting threshold |
+| interrupted | cancellation was propagated without recording success |
 
-> **Discrepancy note:** the task brief asked for explicit "state transitions
-> (idle/running/failed/cap-reaching)". The source has **no state object** — these are
-> documented here as the intended emergent semantics, and the tests assert the observable
-> behaviors (sleep between cycles, exception swallowed, cancellation propagated) rather
-> than a nonexistent state attribute.
+Quota pauses remain separate signals owned by the agents. Previous failure
+counts remain visible during a retry and reset on success. These observations
+reset when the process restarts and never initiate or cancel work.
 
 ---
 
@@ -112,8 +119,9 @@ The orchestrator **does not**:
   / `update_schedule` are owned by the **tracker**.
 - **Stage transcripts** — owned by the **scribe**.
 - **Write to the vault** — owned by the **janitor** (`vault_flush_task`).
-- **Report fleet health** — the **heartbeat** agent owns `collect_fleet_status`; the
-  orchestrator merely schedules `heartbeat_operation` as one of its nine scheduled cycles.
+- **Report fleet health** — Heartbeat owns collection and reporting. The
+  orchestrator observes its cycles through `CycleMonitor` and schedules
+  `heartbeat_operation` as one of its nine scheduled cycles.
 - **Enforce per-agent concurrency** — the scheduler owns one non-overlapping loop per
   agent and BaseBatchAgent owns its internal item semaphore. Prefect work-queue limits
   apply only when a rollback adapter is deliberately run through Prefect.
@@ -123,7 +131,8 @@ The orchestrator **does not**:
 
 ## 5. Interaction with the DB / collaborators
 
-The orchestrator's only collaborators are the nine scheduled operation callables. It calls
+The orchestrator's collaborators are the nine scheduled operation callables and
+the process-local cycle monitor. It calls
 `spec.operation(**spec.kwargs)` and awaits the resulting coroutine. It holds **no
 repository, no client, no connection**. This makes it trivially unit-testable: mock the
 operations (return `AsyncMock` coroutines) and assert scheduling/dispatch/isolation

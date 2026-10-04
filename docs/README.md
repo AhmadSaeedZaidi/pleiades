@@ -5,6 +5,7 @@ Current guides:
 - [Quick start](quickstart.md): development environment and first checks.
 - [Architecture](architecture.md): ownership, data flow, scheduler, and components.
 - [Operations and deployment](deploy.md): live service observation and reviewed deployments.
+- [Heartbeat](heartbeat.md): Discord health, cycle progress and monitoring limits.
 - [Knowledge graph](knowledge-graph.md): observed YouTube Wikipedia classifications and bounded enrichment.
 - [Dashboard](../dashboard/README.md): access, configuration, and limits.
 - [Testing](testing.md): hermetic unit tests and guarded integration/live tiers.

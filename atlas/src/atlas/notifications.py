@@ -67,17 +67,18 @@ class DiscordNotifier:
             ),
         }
 
-        async with aiohttp.ClientSession() as session:
-            try:
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
                 async with session.post(webhook_url, json={"embeds": [embed]}) as response:
                     if response.status not in [200, 204]:
                         logger.error(f"Discord alert failed: HTTP {response.status}")
                         return False
                     logger.info(f"Discord alert delivered to {channel.value}: {title}")
                     return True
-            except Exception as e:
-                logger.exception(f"Discord alert error: {e}")
-                return False
+        except Exception as error:
+            # HTTP exception messages can contain the secret webhook URL.
+            logger.warning("Discord alert error (%s)", type(error).__name__)
+            return False
 
 
 notifier = DiscordNotifier()
