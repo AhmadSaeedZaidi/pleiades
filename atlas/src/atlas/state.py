@@ -54,18 +54,15 @@ def clear_quota_exhausted(agent_name: str) -> None:
 
 
 def quota_exhausted_agents() -> list[str]:
-    """Return agents currently marked quota-exhausted (expired marks purged)."""
+    """Read active quota marks without rewriting shared state during reporting."""
     state = _read()
     marks = state.get("quota_exhausted", {})
     now = time.time()
-    expired = [
-        a for a, e in marks.items() if now - float(e.get("since", 0)) >= QUOTA_EXHAUSTED_TTL_S
+    return [
+        agent
+        for agent, entry in marks.items()
+        if now - float(entry.get("since", 0)) < QUOTA_EXHAUSTED_TTL_S
     ]
-    if expired:
-        for a in expired:
-            del marks[a]
-        _write(state)
-    return list(marks.keys())
 
 
 def should_send_quota_alert(agent_name: str) -> bool:

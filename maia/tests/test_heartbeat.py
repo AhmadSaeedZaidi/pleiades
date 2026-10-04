@@ -341,6 +341,20 @@ async def test_standalone_snapshot_does_not_invent_worker_health(reporting, monk
 
 
 @pytest.mark.asyncio
+async def test_unreadable_quota_state_does_not_silence_reporting(reporting, monkeypatch):
+    def unavailable():
+        raise PermissionError("private local state path")
+
+    monkeypatch.setattr("maia.heartbeat.flow.quota_exhausted_agents", unavailable)
+    summary = await heartbeat_operation()
+    assert summary["notified"] and not summary["healthy"]
+    assert "quota state unavailable" in summary["issues"]
+    fields = reporting[2].await_args.kwargs["fields"]
+    assert "Quota state unavailable" in fields["API configuration"]
+    assert "private local state path" not in str(fields)
+
+
+@pytest.mark.asyncio
 async def test_collectors_are_parallel_and_cancelled_at_deadline(reporting, monkeypatch):
     import asyncio
 

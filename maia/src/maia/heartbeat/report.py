@@ -47,7 +47,7 @@ def build_report(
     workers: dict[str, Any] | None,
     disk: dict[str, int] | None,
     topic_sync_enabled: bool,
-    rate_limited: list[str],
+    rate_limited: list[str] | None,
     audio_configuration: str,
     collection_seconds: float,
     fleet: dict[str, tuple[str, str]] | None = None,
@@ -146,13 +146,17 @@ def build_report(
         audio_configuration
         + "\n"
         + (
-            "Quota paused: " + ", ".join(rate_limited)
+            "Quota state unavailable"
+            if rate_limited is None
+            else "Quota paused: " + ", ".join(rate_limited)
             if rate_limited
             else "No recorded quota pauses"
         )
     )
     if rate_limited:
         issues.append("quota pauses: " + ", ".join(rate_limited))
+    elif rate_limited is None:
+        issues.append("quota state unavailable")
     if fleet is not None:
         fields["Optional Prefect"] = "\n".join(
             f"{name}: {label}" for name, (label, _) in fleet.items()

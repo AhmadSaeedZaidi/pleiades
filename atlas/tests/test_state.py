@@ -1,8 +1,25 @@
 """Tests for the on-disk rate-limit back-off state in :mod:`atlas.state`."""
 
 import time
+from unittest.mock import Mock
 
 import atlas.state as state
+
+
+def test_quota_reporting_ignores_expired_marks_without_writing(monkeypatch):
+    monkeypatch.setattr(state.time, "time", lambda: 30000)
+    monkeypatch.setattr(
+        state,
+        "_read",
+        lambda: {
+            "quota_exhausted": {"expired": {"since": 0}, "active": {"since": 29999}},
+            "other_agent_budget": {"used": 10},
+        },
+    )
+    writer = Mock()
+    monkeypatch.setattr(state, "_write", writer)
+    assert state.quota_exhausted_agents() == ["active"]
+    writer.assert_not_called()
 
 
 def test_bump_grows_exponentially_and_caps(monkeypatch, tmp_path):

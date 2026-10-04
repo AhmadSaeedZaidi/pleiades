@@ -208,6 +208,11 @@ async def heartbeat_operation(*, include_prefect: bool = False) -> dict[str, Any
         else "No transcription API key configured"
     ) + " (configuration only; no API probe)"
     workers = cycle_monitor.snapshot()
+    rate_limited = None
+    try:
+        rate_limited = quota_exhausted_agents()
+    except Exception as error:  # noqa: BLE001 - damaged local state must not silence reports
+        logger.warning("Quota state unavailable (%s)", type(error).__name__)
     elapsed = time.monotonic() - started
     report = build_report(
         services=services,
@@ -217,7 +222,7 @@ async def heartbeat_operation(*, include_prefect: bool = False) -> dict[str, Any
         workers=workers,
         disk=disk,
         topic_sync_enabled=settings.TOPIC_SYNC_ENABLED,
-        rate_limited=quota_exhausted_agents(),
+        rate_limited=rate_limited,
         audio_configuration=audio_configuration,
         collection_seconds=elapsed,
         fleet=fleet,

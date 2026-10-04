@@ -32,6 +32,8 @@ Counts reflect successful handoffs/archival, not attempted batch sizes.
 Exceptions are recorded by class, without payloads or private endpoint details.
 The current attempt stays visible alongside previous failures until recovery.
 Missing collectors show **unavailable**, rather than fabricated zero counts.
+Quota reporting ignores expired marks without rewriting other agents' shared
+state; unreadable state is surfaced without silencing the report.
 Running the standalone Heartbeat CLI cannot observe the scheduler in another
 process and reports that limitation.
 
