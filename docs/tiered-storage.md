@@ -19,8 +19,9 @@ rechecks lifecycle, row version, pending flags, and transcript safety under the
 parent lock before marking videos archived and deleting transcript rows.
 Recent metric samples and durable tracking state remain hot.
 
-A transcript flush uses one commit for up to 50 records/16 MiB, rather than a
-fixed 25-record chunk. Oversized individual records remain hot and are reported
+A scheduled transcript batch uses one commit for up to 100 records/16 MiB,
+rather than a fixed 25-record chunk. The independent library defaults to 50
+records; Janitor supplies its configurable batch size. Oversized individual records remain hot and are reported
 as failures. Readbacks run with bounded concurrency on Atlas's separate
 2-thread vault executor. Backends own their retries; the caller has no second
 retry loop. Python still waits for active worker threads at process exit.
