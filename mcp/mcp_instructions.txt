@@ -1,0 +1,73 @@
+You are integrating a remote MCP (Model Context Protocol) server into my local
+OpenCode installation. Do this end-to-end, verify it works, and report back.
+
+## The server
+- Name: pleiades (a YouTube-intelligence MCP server)
+- Transport: Streamable HTTP
+- MCP endpoint URL: http://89.168.125.2:8000/mcp
+- It exposes 8 tools: search_youtube, get_video_metadata, get_transcript,
+  summarize_transcript, get_keyframes, get_thumbnail, get_audio, list_artifacts.
+- Media results are returned as downloadable http:// artifact URLs
+  (served from http://89.168.125.2:8001/...). Two image tools (get_thumbnail,
+  get_keyframes with inline=true) can also return the image INLINE so a
+  vision-capable model can see it directly.
+- Note: ingress is IP-locked, so this only works from THIS machine's network.
+
+## Tasks
+1. Confirm reachability first (before touching config):
+   - Run: curl -s -o /dev/null -w "%{http_code}\n" http://89.168.125.2:8000/mcp
+     Expect 406 (that's correct - the bare endpoint rejects non-MCP requests).
+   - Run: curl -s -o /dev/null -w "%{http_code}\n" http://89.168.125.2:8001/
+     Expect 200 (artifact server).
+   - If either fails, STOP and tell me - the network/firewall is the problem,
+     not the config.
+
+2. Locate my OpenCode config. Check, in order, for an existing file:
+     ./opencode.json
+     ./opencode.jsonc
+     ~/.config/opencode/opencode.json
+   Read whatever exists. Do NOT clobber existing settings - merge.
+
+3. Add the MCP server. OpenCode's schema uses an "mcp" object with a "remote"
+   type for HTTP servers. Add (merging into any existing "mcp" block):
+
+     {
+       "$schema": "https://opencode.ai/config.json",
+       "mcp": {
+         "pleiades": {
+           "type": "remote",
+           "url": "http://89.168.125.2:8000/mcp",
+           "enabled": true
+         }
+       }
+     }
+
+   If my installed OpenCode version uses a different MCP config shape than the
+   above, detect the correct schema (check `opencode --help`, the docs, or an
+   existing mcp entry in my config) and use whatever the installed version
+   actually expects. Report which shape you used and why.
+
+4. Restart / reload OpenCode so it picks up the new server, then verify the
+   tools are registered (e.g. list available tools/MCP servers via whatever
+   command or UI OpenCode provides). Confirm all 8 pleiades tools appear.
+
+5. Functional smoke test - actually call the server through OpenCode:
+   a. Call search_youtube with query "lofi hip hop" and show me one result's
+      video_id + title.
+   b. Call summarize_transcript on video id "dQw4w9WgXcQ" and show the first
+      few lines of the returned Markdown summary.
+   c. Call get_thumbnail on "dQw4w9WgXcQ" (inline defaults to true) and confirm
+      the model receives an inline image (image content block), not just a URL.
+      State plainly whether you can SEE the image.
+
+## Constraints
+- Only edit config files; do not install anything or change firewall/network.
+- Back up any config file before editing it.
+- If a step fails, show the exact command, the exact error, and your diagnosis
+  before trying a fix.
+
+## Report back
+- Which config file you edited (with a diff of the change).
+- Which MCP config shape you used.
+- The output of each of the 3 smoke tests, including whether the thumbnail
+  image was actually visible to you inline.

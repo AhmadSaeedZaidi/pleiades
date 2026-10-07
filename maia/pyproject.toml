@@ -1,0 +1,120 @@
+[project]
+name = "pleiades-maia"
+version = "0.1.0"
+description = "The Stateless Agent Layer for Project Pleiades - High-velocity video discovery and viral velocity monitoring"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.12, <3.13"
+authors = [
+    {name = "Ahmad Saeed Zaidi"}
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Typing :: Typed",
+]
+dependencies = [
+    "pleiades-tiered-storage>=0.1.0,<0.2.0",
+    "pleiades-atlas[hf]",
+    "prefect==3.7.8",
+    "aiohttp>=3.9.0,<4.0.0",
+    "tenacity>=8.2.0,<9.0.0",
+    "opencv-python>=4.9.0,<5.0.0",
+    # yt-dlp 2026 renamed --js-runtime -> --js-runtimes and requires Deno >= 2.3.0
+    # for the YouTube BotGuard/POT challenge. Pin to that line so deployments stay
+    # on an API that supports the painter/scribe/muralist anti-rate-limit path.
+    "yt-dlp>=2026.6.9",
+    "numpy>=1.26.0,<2.0.0",
+    "youtube-transcript-api>=1.2.0,<2.0.0",
+    "requests>=2.31.0,<3.0.0",
+]
+
+[project.scripts]
+maia-hunter = "maia.hunter:main"
+maia-tracker = "maia.tracker:main"
+maia-scribe = "maia.scribe:main"
+maia-painter = "maia.painter:main"
+maia-janitor = "maia.janitor:main"
+
+[tool.poetry]
+name = "pleiades-maia"
+version = "0.1.0"
+description = "The Stateless Agent Layer for Project Pleiades - High-velocity video discovery and viral velocity monitoring"
+authors = ["Ahmad Saeed Zaidi"]
+readme = "README.md"
+license = "MIT"
+packages = [{include = "maia", from = "src"}]
+
+[tool.poetry.dependencies]
+python = ">=3.12, <3.13"
+pleiades-tiered-storage = {path = "../tiered_storage", develop = true}
+pleiades-atlas = {path = "../atlas", develop = true, extras = ["hf"]}
+
+[tool.poetry.group.dev.dependencies]
+ruff = ">=0.15.0,<1.0.0"
+mypy = ">=2.0.0,<3.0.0"
+pytest = ">=8.0.0,<9.0.0"
+pytest-asyncio = ">=0.23.0,<1.0.0"
+pytest-env = ">=1.1.0,<2.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+warn_unused_ignores = false
+warn_redundant_casts = false
+disallow_untyped_decorators = false
+
+[[tool.mypy.overrides]]
+module = [
+    "google.cloud.*",
+    "pandas.*",
+    "huggingface_hub.*",
+    "yt_dlp.*",
+    "youtube_transcript_api.*",
+    "youtube_transcript_api._errors.*",
+    "prefect.*",
+    "tenacity.*",
+    "psycopg.*",
+    "psycopg_pool.*",
+    "orjson.*",
+    "atlas.*",
+    "requests.*"
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src", "../atlas/src", ".."]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--tb=short",
+    "--color=yes",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:prefect.*",
+]
+env = [
+    "DATABASE_URL=postgresql://test:test@localhost:5432/test",
+    "YOUTUBE_API_KEY_POOL_JSON=[\"test_key_1\", \"test_key_2\", \"test_key_3\"]",
+    "COMPLIANCE_MODE=true",
+    "VAULT_PROVIDER=huggingface",
+    "HF_DATASET_ID=mock/dataset",
+    "HF_TOKEN=mock_token",
+    "ENV=test",
+    "JANITOR_ENABLED=false",
+    "JANITOR_RETENTION_DAYS=7",
+]

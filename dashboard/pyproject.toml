@@ -1,0 +1,34 @@
+[project]
+name = "pleiades-dashboard"
+version = "0.1.0"
+description = "Read-only operator interface for the Pleiades YouTube pipeline"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "pleiades-atlas[hf]",
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.30,<1",
+    "python-dotenv>=1,<2",
+]
+
+[project.scripts]
+pleiades-dashboard = "pleiades_dashboard.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+pleiades_dashboard = ["static/*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src", "../atlas/src", ".."]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true

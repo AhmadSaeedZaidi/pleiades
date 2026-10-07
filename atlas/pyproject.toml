@@ -1,0 +1,128 @@
+[project]
+name = "pleiades-atlas"
+version = "0.2.1"
+description = "Core Infrastructure Library for Pleiades Surveillance Platform"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.12, <3.13"
+authors = [
+    {name = "Ahmad Saeed Zaidi"}
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Typing :: Typed",
+]
+dependencies = [
+    "pleiades-tiered-storage>=0.1.0,<0.2.0",
+    "pydantic>=2.6.0,<2.14.0",
+    "pydantic-settings>=2.2.0,<3.0.0",
+    "psycopg[binary,pool]>=3.1.18,<4.0.0",
+    "aiohttp>=3.9.3,<4.0.0",
+    "orjson>=3.9.15,<4.0.0",
+    "sqlparse>=0.4.4,<1.0.0",
+]
+
+[tool.setuptools.package-data]
+atlas = ["*.sql"]
+
+[project.optional-dependencies]
+hf = [
+    "huggingface-hub>=0.20.0,<1.0.0",
+    "pandas>=2.2.0,<3.0.0",
+    "pyarrow>=15.0.0,<16.0.0",
+]
+gcs = [
+    "google-cloud-storage>=2.14.0,<3.0.0",
+]
+all = [
+    "huggingface-hub>=0.20.0,<1.0.0",
+    "google-cloud-storage>=2.14.0,<3.0.0",
+    "pandas>=2.2.0,<3.0.0",
+    "pyarrow>=15.0.0,<16.0.0",
+]
+
+[project.scripts]
+atlas = "atlas.__main__:main"
+
+[tool.poetry]
+name = "pleiades-atlas"
+version = "0.2.1"
+description = "Core Infrastructure Library for Pleiades Surveillance Platform"
+authors = ["Ahmad Saeed Zaidi"]
+readme = "README.md"
+license = "MIT"
+packages = [{include = "atlas", from = "src"}]
+include = ["src/atlas/*.sql"]
+
+[tool.poetry.dependencies]
+python = ">=3.12, <3.13"
+pleiades-tiered-storage = {path = "../tiered_storage", develop = true}
+
+[tool.poetry.group.dev.dependencies]
+ruff = ">=0.15.0,<1.0.0"
+mypy = ">=2.0.0,<3.0.0"
+pytest = ">=8.0.0,<9.0.0"
+pytest-asyncio = ">=0.23.0,<1.0.0"
+pytest-env = ">=1.1.0,<2.0.0"
+huggingface-hub = ">=0.20.0,<1.0.0"
+pandas = ">=2.2.0,<3.0.0"
+pyarrow = ">=15.0.0,<16.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+warn_unused_ignores = false
+warn_redundant_casts = false
+disallow_untyped_decorators = false
+
+
+[[tool.mypy.overrides]]
+module = [
+    "google.cloud.*",
+    "pandas.*",
+    "huggingface_hub.*",
+    "pydantic.*",
+    "pydantic_settings.*",
+    "aiohttp.*",
+    "psycopg.*",
+    "psycopg_pool.*",
+    "orjson.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src", ".."]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--tb=short",
+    "--disable-warnings",
+]
+filterwarnings = []
+env = [
+    "DATABASE_URL=postgresql://test:test@localhost:5432/test",
+    "YOUTUBE_API_KEY_POOL_JSON=[\"test_key_1\", \"test_key_2\", \"test_key_3\"]",
+    "COMPLIANCE_MODE=true",
+    "VAULT_PROVIDER=huggingface",
+    "HF_DATASET_ID=mock/dataset",
+    "HF_TOKEN=mock_token",
+    "ENV=dev",
+    "JANITOR_ENABLED=false",
+    "JANITOR_RETENTION_DAYS=7",
+]

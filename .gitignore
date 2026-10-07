@@ -20,6 +20,8 @@ wheels/
 *.egg
 MANIFEST
 .ruff_cache/
+.pytest_cache/
+.mypy_cache/
 
 # --- Virtual Environments ---
 # It's standard to name venvs one of these
@@ -106,3 +108,31 @@ temp_downloads/
 
 # --- Misc ---
 *.sh
+local-doc-slop/
+context/
+COOKIES.txt
+.secrets/
+*cookies*.txt
+
+# --- Cline ---
+.clinerules/
+.cline*/
+
+# --- Local session summary (not committed) ---
+SUMMARY.md
+.local-summary/
+
+# --- Local tooling / agent + session state (not committed) ---
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/pleiades-architecture/
+!.agents/skills/pleiades-cleanup/
+.opencode/
+
+# --- Stray download / transcript artifacts ---
+*.part
+*.json3
+*.webm
+*.mp4
+*.opus

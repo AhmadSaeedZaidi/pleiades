@@ -1,0 +1,42 @@
+[Unit]
+Description=Pleiades YouTube SOCKS tunnel through the micro VPS
+Documentation=file:/home/ubuntu/code/pleiades/docs/deploy.md
+Wants=network-online.target
+After=network-online.target
+Before=pleiades-ingestion.service
+
+[Service]
+Type=simple
+User=ubuntu
+# Host-key verification is ON. Every byte of YouTube traffic — including the
+# authenticated session cookie jar named by YOUTUBE_COOKIES_PATH — is tunnelled
+# through this SOCKS socket, and this unit has Restart=always, so
+# StrictHostKeyChecking=no was a standing MITM: it reconnected forever,
+# indefinitely trusting whatever answered on the far side.
+#
+# The key is pinned in deploy/ssh/known_hosts. Populate it once with:
+#   ssh-keyscan -H -p 22 10.0.0.22 > deploy/ssh/known_hosts
+# and verify the fingerprint out of band before trusting it.
+ExecStart=/usr/bin/ssh -i /home/ubuntu/.ssh/pleiades-mini-key -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/home/ubuntu/code/pleiades/deploy/ssh/known_hosts -o GlobalKnownHostsFile=/etc/ssh/ssh_known_hosts -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -N -D 127.0.0.1:1090 ubuntu@10.0.0.22
+Restart=always
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+CapabilityBoundingSet=
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
