@@ -153,3 +153,29 @@ lowers vacuum/analyze scale factors to 2% for transcripts and detailed metrics,
 including transcript TOAST payloads. This makes released space reusable sooner
 without changing global server settings. It preserves rows and is separate from
 one-time operator `VACUUM (ANALYZE)` maintenance.
+
+## Janitor source cleanup
+
+Janitor also parks unavailable, unfetched sources in a separate `retired_at`
+state without changing lifecycle status or stage failures. Candidates need at
+least three successful Tracker API responses that omit the ID, a DORMANT
+watchlist, and at least seven days since the last successful observation (or
+watchlist enrollment if never observed). Download failures, quota failures,
+timeouts and disk errors are insufficient evidence. Cached raw media remains
+eligible for offline processing; videos with any PROCESSING stage are skipped.
+
+Each fifteen-minute cycle parks at most fifty sources and restores at most
+fifty, with a five-second SQL timeout and locked rows skipped. Transcript bodies,
+cold pointers, media, topic edges, metric history and failure provenance remain
+intact. Tracker keeps its monthly rechecks. A later successful observation clears
+retirement on Janitor's next cycle; previously failed stages remain failed and
+require a separately justified repair. Heartbeat reports parked totals separately
+from active failures, and the inspector labels parked records.
+
+Apply the reviewed [nullable-column migration](../deploy/sql/20261007_video_retirement.sql)
+before deploying these source/claim changes. Automatic schema provisioning is
+not a substitute for a reviewed deployment. After migration, preview a bounded
+page with `python -m maia janitor --cleanup-only --dry-run --batch-size 50`.
+The matching `--no-dry-run` invocation performs that page without running vault,
+metrics, key-pool or Prefect maintenance. It records affected IDs in an event.
+Parking is reversible queue cleanup; it does not promise physical disk recovery.

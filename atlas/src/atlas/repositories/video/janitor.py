@@ -35,6 +35,65 @@ _VAULT_SAFE_CLAUSE = """
 
 
 class VideoJanitorMixin(DatabaseAdapter):
+    async def cleanup_unavailable_videos(
+        self, batch_size: int = 50, dry_run: bool = False
+    ) -> dict[str, list[str]]:
+        """Park repeatedly unavailable sources; preserve every artifact and phase.
+
+        Tracker owns availability observations and monthly rechecks. This method
+        makes no outbound requests. Both parent and watchlist rows stay locked
+        from selection through mutation, excluding concurrent claims/tracking.
+        A successful observation restores eligibility, never resets failures.
+        """
+        if not 1 <= batch_size <= 100:
+            raise ValueError("Cleanup batch_size must be between 1 and 100")
+        async with self._connection() as conn, conn.transaction():
+            if dry_run:
+                await conn.execute("SET TRANSACTION READ ONLY")
+            await conn.execute("SET LOCAL statement_timeout = '5s'")
+            await conn.execute("SET LOCAL lock_timeout = '1s'")
+            lock = "" if dry_run else "FOR UPDATE OF v, w SKIP LOCKED"
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    f"""SELECT v.id FROM videos v JOIN watchlist w ON w.video_id=v.id
+                        WHERE v.retired_at IS NOT NULL AND w.unavailable_count=0
+                          AND w.last_tracked_at > v.retired_at
+                        ORDER BY v.retired_at, v.id LIMIT %s {lock}""",
+                    (batch_size,),
+                )
+                restored = [row[0] for row in await cur.fetchall()]
+                await cur.execute(
+                    f"""SELECT v.id FROM videos v JOIN watchlist w ON w.video_id=v.id
+                        WHERE v.retired_at IS NULL
+                          AND v.status IN ('PENDING','PROCESSING','FAILED')
+                          AND v.fetched IS NOT TRUE AND v.raw_uri IS NULL
+                          AND w.tracking_tier='DORMANT' AND w.unavailable_count>=3
+                          AND COALESCE(w.last_tracked_at,w.created_at)
+                              < NOW() - INTERVAL '7 days'
+                          AND NOT ('PROCESSING'=ANY(ARRAY[v.raw_phase::text,
+                              v.audio_phase::text,v.visuals_phase::text,
+                              v.transcript_phase::text,v.clip_phase::text]))
+                        ORDER BY (v.status='FAILED') DESC, v.discovered_at, v.id
+                        LIMIT %s {lock}""",
+                    (batch_size,),
+                )
+                retired = [row[0] for row in await cur.fetchall()]
+            if not dry_run:
+                if restored:
+                    await conn.execute(
+                        """UPDATE videos SET retired_at=NULL, retirement_reason=NULL
+                           WHERE id=ANY(%s)""",
+                        (restored,),
+                    )
+                if retired:
+                    await conn.execute(
+                        """UPDATE videos SET retired_at=NOW(),
+                           retirement_reason='repeated_api_unavailability'
+                           WHERE id=ANY(%s)""",
+                        (retired,),
+                    )
+        return {"retired_ids": retired, "restored_ids": restored}
+
     async def sweep_archivable(self, batch_size: int = _ARCHIVAL_BATCH_SIZE) -> list[Video]:
         cutoff = datetime.now(UTC) - timedelta(days=settings.JANITOR_RETENTION_DAYS)
         rows = await self._fetch_all(

@@ -22,6 +22,8 @@ class Video(BaseModel):  # type: ignore[misc]
     last_updated_at: datetime | None = None
     last_tracked_at: datetime | None = None
     archived_at: datetime | None = None
+    retired_at: datetime | None = None
+    retirement_reason: str | None = None
     status: str | None = "PENDING"
     has_transcript: bool = False
     has_visuals: bool = False

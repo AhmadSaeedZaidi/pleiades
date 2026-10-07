@@ -168,6 +168,7 @@ function videos(data) {
     cell.append(item);
     const status = node("td");
     status.append(badge(video.status));
+    if (video.retired_at) status.append(node("span", "pill", "parked"));
     const stages = node("td");
     const indicators = node("div", "stage-indicators");
     ["raw", "audio", "visuals", "transcript"].forEach(stage => {
@@ -234,6 +235,7 @@ async function detail(id) {
     const phases = node("div", "detail-phases");
     Object.keys(names).forEach(s => phases.append(node("span", "pill", `${names[s]} · ${(v[`${s}_phase`] || "unknown").toLowerCase()}`)));
     box.append(phases, node("p", "detail-meta", `Published ${time(v.published_at, false)} · Duration ${duration(v.duration)}\nDiscovered ${time(v.discovered_at, false)} · Tracking ${v.tracking_tier || "unscheduled"}`));
+    if (v.retired_at) box.append(node("p", "detail-meta", `Parked as unavailable ${time(v.retired_at, false)}. Data is preserved; Tracker will recheck availability.`));
     if (v.tags?.length) box.append(node("p", "detail-meta", v.tags.join(" · ")));
     box.append(node("h2", "", "Transcript preview"));
     if (v.transcript_preview) {

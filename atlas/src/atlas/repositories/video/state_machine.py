@@ -16,6 +16,7 @@ class VideoStateMixin(DatabaseAdapter):
             WHERE id IN (
                 SELECT id FROM videos
                 WHERE status IN ('PENDING', 'PROCESSING')
+                  AND retired_at IS NULL
                   AND has_transcript = FALSE
                   AND transcript_phase <> 'FAILED'
                 ORDER BY discovered_at ASC
@@ -36,6 +37,7 @@ class VideoStateMixin(DatabaseAdapter):
             WHERE id IN (
                 SELECT id FROM videos
                 WHERE status IN ('PENDING', 'PROCESSING')
+                  AND retired_at IS NULL
                   AND fetched = TRUE
                   AND has_visuals = FALSE
                   AND visuals_phase <> 'FAILED'
@@ -67,6 +69,7 @@ class VideoStateMixin(DatabaseAdapter):
             WHERE id IN (
                 SELECT id FROM videos
                 WHERE status IN ('PENDING', 'PROCESSING')
+                  AND retired_at IS NULL
                   AND fetched = FALSE
                   AND raw_phase <> 'FAILED'
                   AND (last_updated_at IS NULL
@@ -93,6 +96,7 @@ class VideoStateMixin(DatabaseAdapter):
             WHERE id IN (
                 SELECT id FROM videos
                 WHERE status IN ('PENDING', 'PROCESSING', 'PROCESSED')
+                  AND retired_at IS NULL
                   AND fetched = TRUE
                   AND has_audio = FALSE
                   AND audio_phase <> 'FAILED'
@@ -113,6 +117,7 @@ class VideoStateMixin(DatabaseAdapter):
             WHERE id IN (
                 SELECT id FROM videos
                 WHERE status IN ('PENDING', 'PROCESSING')
+                  AND retired_at IS NULL
                   AND has_video = FALSE
                   AND raw_uri IS NOT NULL
                   AND clip_phase <> 'FAILED'

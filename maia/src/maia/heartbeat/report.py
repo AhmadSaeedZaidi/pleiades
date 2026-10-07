@@ -89,7 +89,7 @@ def build_report(
     else:
         sc = pipeline["status_counts"]
         failed = int(pipeline.get("failed_steps", 0))
-        legacy = int(sc.get("FAILED", 0))
+        legacy = int(pipeline.get("legacy_failed_active", sc.get("FAILED", 0)))
         overlap = int(pipeline.get("failed_overlap", 0))
         breakdown = (
             ", ".join(
@@ -104,7 +104,8 @@ def build_report(
             f"Pending: {sc.get('PENDING', 0):,} · Processing: {sc.get('PROCESSING', 0):,}\n"
             f"Processed: {sc.get('PROCESSED', 0):,} · Archived: {sc.get('ARCHIVED', 0):,}\n"
             f"Videos with failed stages: **{failed:,}** ({breakdown})\n"
-            f"Legacy failed records: **{legacy:,}** · Overlap: **{overlap:,}**"
+            f"Active legacy failures: **{legacy:,}** · Overlap: **{overlap:,}**\n"
+            f"Parked unavailable: **{pipeline.get('retired_videos', 0):,}** (data preserved)"
         )
         if failed or legacy:
             issues.append(f"{failed:,} videos with failed stages; {legacy:,} legacy failed records")
@@ -129,7 +130,9 @@ def build_report(
     if workers is not None:
         fields["Hot / cold storage"] += (
             f"\nObserved: **{progress.get('vault_flushed', 0):,}** verified handoffs · "
-            f"**{progress.get('stats_archived', 0):,}** stats archived"
+            f"**{progress.get('stats_archived', 0):,}** stats archived\n"
+            f"Unavailable cleanup: {progress.get('videos_retired', 0):,} parked · "
+            f"{progress.get('videos_restored', 0):,} restored"
         )
     if disk is None:
         fields["Host disk"] = "Metrics unavailable"

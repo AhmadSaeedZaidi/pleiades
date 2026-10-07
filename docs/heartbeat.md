@@ -10,10 +10,10 @@ The report includes:
 
 - Executor liveness and actual states of all nine scheduled workers, including
   Grapher. Failed, interrupted, late, and unusually long cycles are flagged.
-- Extraction totals, recent ingestion, per-stage failures and legacy failed records, including their overlap.
+- Extraction totals, recent ingestion, active per-stage failures and active legacy failures, including their overlap; parked unavailable sources are shown separately.
 - Tracking updates, durable due work and SQL metric rows.
 - SQL size, staged and retained transcript payloads, verified handoffs and metric
-  archival observed by this process, plus host disk usage and free space.
+  archival and source retirement/restoration observed by this process, plus host disk usage and free space.
 - Wikipedia topic/link counts, checked video/channel coverage, recent checks,
   unavailable resources, and whether enrichment is enabled.
 - Configured transcription provider, Grapher key-pool size and recorded quota pauses. Configuration

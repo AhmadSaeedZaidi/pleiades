@@ -389,6 +389,7 @@ async def test_every_claim_skips_only_its_own_failed_phase(method_name: str, ste
     s._fetch_all.return_value = []
     await getattr(s, method_name)(5)
     sql, _ = s._fetch_all.await_args.args
+    assert "retired_at IS NULL" in sql
     assert f"{step}_phase <> 'FAILED'" in sql
     for other in ("raw", "audio", "visuals", "transcript", "clip"):
         if other != step:

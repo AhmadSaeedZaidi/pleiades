@@ -42,6 +42,8 @@ CREATE TABLE IF NOT EXISTS videos (
     discovered_at TIMESTAMPTZ DEFAULT NOW(),
     last_updated_at TIMESTAMPTZ,
     archived_at TIMESTAMPTZ,
+    retired_at TIMESTAMPTZ,
+    retirement_reason TEXT,
     status VARCHAR(20) DEFAULT 'PENDING',
     has_transcript BOOLEAN DEFAULT FALSE,
     has_visuals BOOLEAN DEFAULT FALSE,

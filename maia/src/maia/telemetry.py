@@ -15,10 +15,18 @@ _COUNTERS = {
     "vault_failed",
     "stats_archived",
     "videos_archived",
+    "videos_retired",
+    "videos_restored",
     "videos_failed",
 }
 _FAILURES = {"vault_failed", "videos_failed", "searches_failed", "failed"}
-_ERRORS = {"vault_flush_error", "stats_error", "key_pool_error", "search_queue_cull_error"}
+_ERRORS = {
+    "vault_flush_error",
+    "stats_error",
+    "key_pool_error",
+    "search_queue_cull_error",
+    "cleanup_error",
+}
 
 
 @dataclass

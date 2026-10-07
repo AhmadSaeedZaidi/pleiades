@@ -1,11 +1,17 @@
 # Cleanup ledger
 
-Updated 2026-10-04. Supersedes the historical item-by-item worklogs.
+Updated 2026-10-07. Supersedes the historical item-by-item worklogs.
 
 Completed in the October cleanup: removed the unused training/prediction stack,
 retired its workflows/tests, consolidated current guides and repository skills,
 hardened unit DB isolation, added a read-only UI, and included it in the quality
 gate. See [current audit](../audits/OCTOBER_CLEANUP.md) for validation evidence.
+
+Janitor's source-retirement changes are reviewable: repeated missing-ID Tracker
+observations park unfetched sources without deleting artifacts or resetting phases,
+and successful rechecks restore eligibility. See [storage](../tiered-storage.md).
+The reviewed migration and ingestion/dashboard deployment remain separate from
+source verification; the live system is unchanged by local tests.
 
 Remaining coordinated work:
 

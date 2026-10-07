@@ -1,9 +1,8 @@
 """Maia Janitor: tiered storage state-machine cleanup agent.
 
-Moves data from the hot index (Neon PostgreSQL) to the cold tier (Vault) via a
-strict transactional state machine: PENDING → PROCESSING → PROCESSED → ARCHIVED
-(and FAILED). On vault failure it logs to EventRepository and leaves the hot DB
-untouched.
+Owns verified hot-to-cold handoffs and reversible retirement of unavailable
+sources. Lifecycle status and stage failures remain independent; retirement
+never deletes artifacts or resets failures.
 """
 
 import argparse
@@ -28,6 +27,32 @@ logger = logging.getLogger(__name__)
 
 
 DEFAULT_BATCH_SIZE = 50
+
+
+async def cleanup_unavailable_task(batch_size: int, dry_run: bool) -> dict[str, Any]:
+    """Bounded, reversible retirement based on Tracker's durable observations."""
+    result = await VideoRepository().cleanup_unavailable_videos(batch_size, dry_run)
+    counts: dict[str, Any] = {
+        "videos_retired": len(result["retired_ids"]),
+        "videos_restored": len(result["restored_ids"]),
+    }
+    logger.info(
+        "Unavailable cleanup: %d parked, %d restored (dry_run=%s)",
+        counts["videos_retired"],
+        counts["videos_restored"],
+        dry_run,
+    )
+    if not dry_run and any(counts.values()):
+        try:
+            await asyncio.wait_for(
+                events.emit("janitor.unavailable_cleanup", "janitor", {**counts, **result}),
+                timeout=5,
+            )
+        except Exception as exc:
+            # Cleanup committed already: preserve its counts even if telemetry fails.
+            counts["cleanup_error"] = type(exc).__name__
+            logger.warning("Cleanup event delivery failed (%s)", type(exc).__name__)
+    return counts
 
 
 async def sweep_phase_task(batch_size: int) -> list[dict[str, Any]]:
@@ -332,6 +357,8 @@ async def log_summary_task(results: dict[str, Any]) -> None:
             "janitor.cycle_complete",
             "janitor",
             {
+                "videos_retired": results.get("videos_retired", 0),
+                "videos_restored": results.get("videos_restored", 0),
                 "stats_archived": results.get("stats_archived", 0),
                 "videos_archived": results.get("videos_archived", 0),
                 "videos_failed": results.get("videos_failed", 0),
@@ -345,6 +372,7 @@ async def janitor_operation(
     archive_stats: bool = True,
     batch_size: int = DEFAULT_BATCH_SIZE,
     prefect_hygiene: bool = False,
+    cleanup_only: bool = False,
 ) -> dict[str, Any]:
     """Execute the Janitor cleanup cycle — a strict transactional state machine.
 
@@ -371,6 +399,18 @@ async def janitor_operation(
         "dry_run": dry_run,
     }
 
+    if not 1 <= batch_size <= 100:
+        raise ValueError("Janitor batch_size must be between 1 and 100")
+    try:
+        results.update(await cleanup_unavailable_task(batch_size, dry_run))
+    except Exception as exc:
+        # Housekeeping failure must not prevent verified storage handoffs.
+        logger.warning("Unavailable cleanup failed (%s)", type(exc).__name__)
+        results["cleanup_error"] = type(exc).__name__
+
+    if cleanup_only:
+        return results
+
     prefect_hygiene = prefect_hygiene and not dry_run
     if prefect_hygiene:
         try:
@@ -378,7 +418,7 @@ async def janitor_operation(
             results["zombie_runs_reaped"] = reap_result.get("reaped", 0)
         except Exception as e:
             run_logger.exception(f"Phase 0 (zombie-run reap) failed: {e}")
-            results["zombie_reap_error"] = str(e)
+            results["zombie_reap_error"] = type(e).__name__
     else:
         results["zombie_runs_reaped"] = 0
         run_logger.info("Phase 0: Prefect zombie cleanup skipped (optional telemetry only)")
@@ -392,14 +432,14 @@ async def janitor_operation(
             results["key_pool"] = pool_result
         except Exception as e:
             run_logger.exception(f"Phase 0 (key-pool refresh) failed: {e}")
-            results["key_pool_error"] = str(e)
+            results["key_pool_error"] = type(e).__name__
 
         try:
             cull_result = await cull_search_queue_task()
             results["search_queue_culled"] = cull_result.get("culled", 0)
         except Exception as e:
             run_logger.exception(f"Phase 0b (search-queue cull) failed: {e}")
-            results["search_queue_cull_error"] = str(e)
+            results["search_queue_cull_error"] = type(e).__name__
 
         try:
             flush_result = await flush_transcripts_task()
@@ -407,7 +447,7 @@ async def janitor_operation(
             results["vault_failed"] = flush_result.get("failed", 0)
         except Exception as e:
             run_logger.exception(f"Phase 0c (vault flush) failed: {e}")
-            results["vault_flush_error"] = str(e)
+            results["vault_flush_error"] = type(e).__name__
 
     if prefect_hygiene:
         try:
@@ -429,7 +469,7 @@ async def janitor_operation(
             results["stats_archived"] = stats_result["archived"]
         except Exception as e:
             run_logger.exception(f"Phase 1 (stats) failed: {e}")
-            results["stats_error"] = str(e)
+            results["stats_error"] = type(e).__name__
     else:
         run_logger.info(f"Phase 1/3: Skipped (archive_stats={archive_stats}, dry_run={dry_run})")
 
@@ -469,6 +509,8 @@ async def janitor_operation(
         degraded_reasons.append(f"{results['videos_failed']} video(s) failed to archive")
     if results.get("vault_failed", 0):
         degraded_reasons.append(f"{results['vault_failed']} transcript flush(es) failed")
+    if results.get("cleanup_error"):
+        degraded_reasons.append(f"unavailable cleanup failed: {results['cleanup_error']}")
     if results.get("stats_error"):
         degraded_reasons.append(f"cold stats archival failed: {results['stats_error']}")
 
@@ -489,6 +531,8 @@ async def janitor_operation(
         channel=AlertChannel.ALERTS,
         level=AlertLevel.WARNING if degraded_reasons else AlertLevel.INFO,
         fields={
+            "Videos Parked": str(results.get("videos_retired", 0)),
+            "Videos Restored": str(results.get("videos_restored", 0)),
             "Videos Archived": str(results.get("videos_archived", 0)),
             "Videos Failed": str(results.get("videos_failed", 0)),
             "Stats Archived (rows)": str(results.get("stats_archived", 0)),
@@ -515,6 +559,11 @@ class JanitorAgent:
 
     @staticmethod
     def add_cli_args(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument(
+            "--cleanup-only",
+            action="store_true",
+            help="Only preview/perform one bounded unavailable-source cleanup page",
+        )
         parser.add_argument(
             "--dry-run",
             action="store_true",
@@ -551,10 +600,14 @@ class JanitorAgent:
         dry_run: bool = False,
         archive_stats: bool = True,
         batch_size: int = DEFAULT_BATCH_SIZE,
+        cleanup_only: bool = False,
         **kwargs: Any,
     ) -> dict[str, Any]:
         result: dict[str, Any] = await janitor_operation(
-            dry_run=dry_run, archive_stats=archive_stats, batch_size=batch_size
+            dry_run=dry_run,
+            archive_stats=archive_stats,
+            batch_size=batch_size,
+            cleanup_only=cleanup_only,
         )
         return result
 

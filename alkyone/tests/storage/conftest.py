@@ -31,6 +31,7 @@ async def storage_pool():
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS videos (
                 id VARCHAR(20) PRIMARY KEY, channel_id TEXT NOT NULL, title TEXT NOT NULL,
+                retired_at TIMESTAMPTZ, retirement_reason TEXT,
                 status TEXT NOT NULL DEFAULT 'PROCESSED', discovered_at TIMESTAMPTZ DEFAULT now(),
                 last_updated_at TIMESTAMPTZ DEFAULT now(), archived_at TIMESTAMPTZ,
                 has_transcript BOOLEAN DEFAULT TRUE, has_audio BOOLEAN DEFAULT TRUE,

@@ -40,7 +40,9 @@ trigger; archived hot flags can be cleared while artifacts remain in the vault.
 
 Tracker uses the durable watchlist, not the hot extraction queue. Last-sample
 metrics and next due time survive archival. Janitor handles retention only after
-vault safety checks. See [storage](tiered-storage.md) and
+vault safety checks. It also reversibly parks repeatedly unavailable, unfetched
+sources using durable Tracker observations, preserving artifacts and stage states.
+See [storage](tiered-storage.md) and
 [adaptive tracking](adaptive-scheduling.md).
 
 The dashboard reads bounded repository queries with a separate read-only pool.

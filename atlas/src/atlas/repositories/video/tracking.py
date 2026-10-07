@@ -129,6 +129,9 @@ class VideoTrackingMixin(DatabaseAdapter):
             """
             SELECT
                 COUNT(*) AS total,
+                COUNT(*) FILTER (WHERE retired_at IS NOT NULL) AS retired_videos,
+                COUNT(*) FILTER (WHERE status='FAILED' AND retired_at IS NULL)
+                    AS legacy_failed_active,
                 COUNT(*) FILTER (WHERE has_visuals) AS with_visuals,
                 COUNT(*) FILTER (WHERE has_audio) AS audios,
                 COUNT(*) FILTER (WHERE discovered_at > NOW() - INTERVAL '1 hour') AS ingested_1h,
@@ -162,11 +165,11 @@ class VideoTrackingMixin(DatabaseAdapter):
                 COUNT(*) FILTER (WHERE transcript_phase = 'FAILED') AS transcript,
                 COUNT(*) FILTER (WHERE clip_phase = 'FAILED') AS clip
             FROM videos
-            WHERE raw_phase = 'FAILED'
+            WHERE retired_at IS NULL AND (raw_phase = 'FAILED'
                OR audio_phase = 'FAILED'
                OR visuals_phase = 'FAILED'
                OR transcript_phase = 'FAILED'
-               OR clip_phase = 'FAILED'
+               OR clip_phase = 'FAILED')
             """
         )
         failed_row = failed_step_rows[0] if failed_step_rows else {}
@@ -189,6 +192,8 @@ class VideoTrackingMixin(DatabaseAdapter):
 
         return {
             "total": agg.get("total") or 0,
+            "retired_videos": agg.get("retired_videos") or 0,
+            "legacy_failed_active": agg.get("legacy_failed_active") or 0,
             "status_counts": status_counts,
             "failed_step_counts": failed_step_counts,
             "failed_steps": failed_videos,

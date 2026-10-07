@@ -114,6 +114,7 @@ class DashboardRepository:
         rows = await self.rows(
             f"""
             SELECT v.id, v.title, c.title AS channel, v.duration, v.status,
+                v.retired_at, v.retirement_reason,
                 v.discovered_at, v.published_at, v.raw_phase, v.audio_phase,
                 v.visuals_phase, v.transcript_phase, v.clip_phase,
                 w.last_views AS views, w.tracking_tier
@@ -130,6 +131,7 @@ class DashboardRepository:
         rows = await self.rows(
             """
             SELECT v.id, v.title, c.title AS channel, v.duration, v.status,
+                v.retired_at, v.retirement_reason,
                 v.published_at, v.discovered_at, v.last_updated_at, v.tags,
                 v.raw_phase, v.audio_phase, v.visuals_phase, v.transcript_phase, v.clip_phase,
                 w.last_views AS views, w.last_likes AS likes,

@@ -8,6 +8,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 import pytest
 from maia.janitor.flow import (
     archive_cold_stats_task,
+    cleanup_unavailable_task,
     handoff_phase_task,
     janitor_flow,
     janitor_operation,
@@ -47,6 +48,11 @@ async def test_dry_run_skips_storage_and_hygiene_mutations():
 def mock_optional_prefect_and_preflight_steps():
     """Keep janitor unit tests independent of PostgreSQL and Prefect API."""
     with (
+        patch(
+            "maia.janitor.flow.cleanup_unavailable_task",
+            new_callable=AsyncMock,
+            return_value={"videos_retired": 0, "videos_restored": 0},
+        ),
         patch(
             "maia.janitor.flow.refresh_key_pools_task",
             new_callable=AsyncMock,
@@ -338,6 +344,8 @@ async def test_log_summary_emits_event(mock_prefect_logger):
     with patch("maia.janitor.flow.events") as mock_events:
         mock_events.emit = AsyncMock()
         results = {
+            "videos_retired": 0,
+            "videos_restored": 0,
             "stats_archived": 50,
             "videos_archived": 10,
             "videos_failed": 0,
@@ -350,6 +358,8 @@ async def test_log_summary_emits_event(mock_prefect_logger):
             "janitor.cycle_complete",
             "janitor",
             {
+                "videos_retired": 0,
+                "videos_restored": 0,
                 "stats_archived": 50,
                 "videos_archived": 10,
                 "videos_failed": 0,
@@ -450,3 +460,69 @@ async def test_transcript_reconciliation_stops_on_failure_or_elapsed_budget():
             result = await flush_transcripts_task()
         assert result["batches"] == 1
         flush.assert_awaited_once()
+
+
+async def test_cleanup_failure_does_not_block_storage_sweep():
+    with (
+        patch(
+            "maia.janitor.flow.cleanup_unavailable_task",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("private failure payload"),
+        ),
+        patch(
+            "maia.janitor.flow.sweep_phase_task", new_callable=AsyncMock, return_value=[]
+        ) as sweep,
+        patch("maia.janitor.flow.log_summary_task", new_callable=AsyncMock),
+    ):
+        result = await janitor_operation(dry_run=True)
+    assert result["cleanup_error"] == "RuntimeError"
+    sweep.assert_awaited_once()
+
+
+async def test_cleanup_task_dry_run_does_not_emit_event():
+
+    with (
+        patch("maia.janitor.flow.VideoRepository") as repository,
+        patch("maia.janitor.flow.events.emit", new_callable=AsyncMock) as emit,
+    ):
+        repository.return_value.cleanup_unavailable_videos = AsyncMock(
+            return_value={"retired_ids": ["v"], "restored_ids": []}
+        )
+        result = await cleanup_unavailable_task(10, True)
+    assert result == {"videos_retired": 1, "videos_restored": 0}
+    emit.assert_not_awaited()
+
+
+async def test_cleanup_only_skips_unrelated_maintenance():
+    with (
+        patch(
+            "maia.janitor.flow.cleanup_unavailable_task",
+            new_callable=AsyncMock,
+            return_value={"videos_retired": 1, "videos_restored": 2},
+        ) as cleanup,
+        patch("maia.janitor.flow.refresh_key_pools_task", new_callable=AsyncMock) as refresh,
+        patch("maia.janitor.flow.flush_transcripts_task", new_callable=AsyncMock) as flush,
+        patch("maia.janitor.flow.sweep_phase_task", new_callable=AsyncMock) as sweep,
+        patch("maia.janitor.flow.archive_cold_stats_task", new_callable=AsyncMock) as stats,
+    ):
+        result = await janitor_operation(dry_run=True, batch_size=10, cleanup_only=True)
+    cleanup.assert_awaited_once_with(10, True)
+    assert result["videos_retired"] == 1 and result["videos_restored"] == 2
+    for operation in (refresh, flush, sweep, stats):
+        operation.assert_not_awaited()
+
+
+async def test_cleanup_event_failure_preserves_committed_counts():
+    with (
+        patch("maia.janitor.flow.VideoRepository") as repository,
+        patch(
+            "maia.janitor.flow.events.emit",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("private endpoint"),
+        ),
+    ):
+        repository.return_value.cleanup_unavailable_videos = AsyncMock(
+            return_value={"retired_ids": ["v"], "restored_ids": []}
+        )
+        result = await cleanup_unavailable_task(10, False)
+    assert result == {"videos_retired": 1, "videos_restored": 0, "cleanup_error": "RuntimeError"}
