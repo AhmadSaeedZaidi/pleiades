@@ -421,3 +421,46 @@ async def test_report_fits_discord_limits_even_with_large_optional_telemetry(rep
     assert len(fields) <= 25 and all(0 < len(value) <= 1024 for value in fields.values())
     size = sum(len(key) + len(value) for key, value in fields.items())
     assert size + len(payload["title"]) + len(payload["description"]) + 100 < 6000
+
+
+async def test_artifact_inventory_restores_counts_without_losing_health_fields(reporting):
+    reporting[0].return_value = dict(
+        _METRICS,
+        transcripts=12345,
+        with_visuals=6789,
+        audios=4321,
+        raw_sources=5432,
+        full_clips=12,
+    )
+    await heartbeat_operation()
+    fields = reporting[2].await_args.kwargs["fields"]
+    inventory = fields["Artifact inventory (SQL)"]
+    assert "Visual sets: **6,789**" in inventory
+    assert "Audio tracks: **4,321**" in inventory
+    assert "Transcripts: **12,345**" in inventory
+    assert "Raw sources: **5,432**" in inventory
+    assert "Full clips: **12**" in inventory
+    assert "archived vault totals excluded" in inventory
+    assert "Tracker" not in inventory
+    assert "Knowledge graph" in fields and "Hot / cold storage" in fields
+    assert "Videos with failed stages" in fields["Extraction"]
+
+
+async def test_missing_artifact_metrics_are_unavailable_instead_of_zero(reporting):
+    reporting[0].return_value = {
+        key: value
+        for key, value in _METRICS.items()
+        if key not in {"audios", "with_visuals", "transcripts"}
+    }
+    await heartbeat_operation()
+    inventory = reporting[2].await_args.kwargs["fields"]["Artifact inventory (SQL)"]
+    assert inventory.count("unavailable") == 5
+    assert "**0**" not in inventory
+
+
+async def test_artifact_inventory_survives_missing_pipeline_collector(reporting):
+    reporting[0].side_effect = RuntimeError("private database details")
+    await heartbeat_operation()
+    fields = reporting[2].await_args.kwargs["fields"]
+    assert fields["Artifact inventory (SQL)"] == "Metrics unavailable"
+    assert "private database details" not in str(fields)

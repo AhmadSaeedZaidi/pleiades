@@ -60,3 +60,20 @@ async def test_audio_recovery_preserves_legacy_failures_completed_stages_and_pay
     assert (await repo._fetch_one("SELECT content FROM transcripts WHERE video_id='V1'"))[
         "content"
     ] == [{"text": "keep"}]
+
+
+async def test_artifact_inventory_uses_sql_flags_and_counts_cold_transcript_pointers(storage_pool):
+    repo = VideoRepository(storage_pool)
+    await repo._execute("""
+        UPDATE videos SET fetched=TRUE,has_video=TRUE WHERE id='V1';
+        INSERT INTO transcripts(video_id,content) VALUES ('V1','[{"text":"staged"}]');
+        INSERT INTO videos(id,channel_id,title,status,has_visuals,has_audio)
+            VALUES ('cold','channel','archived','ARCHIVED',FALSE,FALSE),
+                   ('audio','channel','audio','PROCESSING',FALSE,TRUE);
+        INSERT INTO transcripts(video_id,content,vault_uri)
+            VALUES ('cold',NULL,'memory://verified-transcript');
+    """)
+    snapshot = await repo.pipeline_snapshot()
+    assert snapshot["transcripts"] == 2
+    assert snapshot["with_visuals"] == snapshot["raw_sources"] == snapshot["full_clips"] == 1
+    assert snapshot["audios"] == 2

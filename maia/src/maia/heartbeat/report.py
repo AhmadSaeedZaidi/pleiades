@@ -38,6 +38,23 @@ def _knowledge_graph_field(metrics: dict[str, Any] | None, *, enabled: bool) -> 
     )
 
 
+def _artifact_inventory_field(metrics: dict[str, Any] | None) -> str:
+    """SQL inventory counts videos with each artifact, not individual frames."""
+    if metrics is None:
+        return "Metrics unavailable"
+
+    def count(key: str) -> str:
+        value = metrics.get(key)
+        return f"**{int(value):,}**" if value is not None else "unavailable"
+
+    return (
+        f"Visual sets: {count('with_visuals')} · Audio tracks: {count('audios')}\n"
+        f"Transcripts: {count('transcripts')}\n"
+        f"Raw sources: {count('raw_sources')} · Full clips: {count('full_clips')}\n"
+        "SQL rows/flags; archived vault totals excluded."
+    )
+
+
 def build_report(
     *,
     services: dict[str, tuple[str, str]],
@@ -83,6 +100,7 @@ def build_report(
             else f"since start ({_age(workers['uptime_seconds'])})"
         )
         fields["Executor"] += f"\nObserved progress: {period}"
+    fields["Artifact inventory (SQL)"] = _artifact_inventory_field(pipeline)
     if pipeline is None:
         fields["Extraction"] = "Metrics unavailable"
         issues.append("extraction metrics unavailable")
@@ -182,7 +200,7 @@ def build_report(
         "description": (
             "; ".join(issues) or "Executor online; observed cycles and metrics healthy"
         )[:700],
-        # Nine fields at <=500 chars leave room for title, description and footer
+        # Ten fields at <=500 chars leave room for title, description and footer
         # under Discord's aggregate 6,000-character limit.
         "fields": {
             key: value[:499] + "…" if len(value) > 500 else value for key, value in fields.items()

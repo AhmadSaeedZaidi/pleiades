@@ -11,6 +11,13 @@ The report includes:
 - Executor liveness and actual states of all nine scheduled workers, including
   Grapher. Failed, interrupted, late, and unusually long cycles are flagged.
 - Extraction totals, recent ingestion, active per-stage failures and active legacy failures, including their overlap; parked unavailable sources are shown separately.
+- Artifact inventory: visual sets, audio tracks, transcript rows, raw sources and
+  full clips recorded in SQL. Each visual/audio/raw/clip count represents videos
+  with that artifact, rather than individual frames. Transcript rows include
+  retained cold pointers. Archival can clear hot artifact flags or remove SQL
+  transcript rows, so these are current SQL counts, not total vault inventory.
+  Collection adds two filtered counts to the existing video aggregate; it does
+  not list the vault or call paid APIs.
 - Tracking updates, durable due work and SQL metric rows.
 - SQL size, staged and retained transcript payloads, verified handoffs and metric
   archival and source retirement/restoration observed by this process, plus host disk usage and free space.
