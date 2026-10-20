@@ -1,0 +1,10 @@
+# Pinned host key for the micro control-plane VPS (10.0.0.22), used by
+# youtube-proxy.service for the YouTube SOCKS tunnel.
+#
+# This file is intentionally EMPTY and the tunnel will refuse to start until it is
+# populated. That is the point: a missing key must fail closed, not fall back to
+# trusting any key. See deploy/ssh/README.md for the (verified) ssh-keyscan
+# procedure.
+#
+# Format (one entry per line):
+#   <host> <key-type> <base64-key>
