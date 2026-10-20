@@ -1,6 +1,6 @@
 # Cleanup ledger
 
-Updated 2026-10-07. Supersedes the historical item-by-item worklogs.
+Updated 2026-10-20. Supersedes the historical item-by-item worklogs.
 
 Completed in the October cleanup: removed the unused training/prediction stack,
 retired its workflows/tests, consolidated current guides and repository skills,
@@ -10,10 +10,15 @@ gate. See [current audit](../audits/OCTOBER_CLEANUP.md) for validation evidence.
 Janitor's source-retirement changes are reviewable: repeated missing-ID Tracker
 observations park unfetched sources without deleting artifacts or resetting phases,
 and successful rechecks restore eligibility. See [storage](../tiered-storage.md).
-The reviewed migration and ingestion/dashboard deployment remain separate from
-source verification; the live system is unchanged by local tests.
+The reviewed migration and ingestion/dashboard deployment were activated on
+2026-10-20 after explicit approval. The first cycle parked fifty sources,
+including two legacy failures, preserving their phases, flags and raw pointers.
+The restored heartbeat inventory was accepted by Discord. Local verification
+and live deployment remain separate checks.
 
 Remaining coordinated work:
+
+- Define discovery topics/languages and bound tag expansion to prevent self-reinforcing news clusters.
 
 - Durable, owner-specific work leases; prove stale workers cannot finalize new claims.
 - Normalize redundant video flags/phases and transcript/raw staging with reviewed migrations.
