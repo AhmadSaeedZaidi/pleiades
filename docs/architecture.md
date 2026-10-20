@@ -33,6 +33,10 @@ transcription. Scribe stages transcript JSON in PostgreSQL. Janitor owns batched
 transcript vault writes and finalization. Full clips and historical discovery
 are manual capabilities.
 
+[Discovery balancing](discovery.md) limits regional concentration using channel
+metadata, population priors, country caps and bounded tag expansion. Existing
+graph facts remain intact; population is not treated as measured YouTube supply.
+
 A video's lifecycle status and individual `raw/audio/visuals/transcript/clip`
 phases describe different facts. Failed stages do not imply every other stage
 failed. Boolean artifact flags remain synchronized by the source schema's

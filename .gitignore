@@ -136,3 +136,6 @@ SUMMARY.md
 *.webm
 *.mp4
 *.opus
+
+# Small versioned public reference data used by discovery balancing.
+!atlas/src/atlas/data/population_2024.json

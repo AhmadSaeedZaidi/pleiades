@@ -26,7 +26,7 @@ dependencies = [
 ]
 
 [tool.setuptools.package-data]
-atlas = ["*.sql"]
+atlas = ["*.sql", "data/*.json"]
 
 [project.optional-dependencies]
 hf = [
@@ -55,7 +55,10 @@ authors = ["Ahmad Saeed Zaidi"]
 readme = "README.md"
 license = "MIT"
 packages = [{include = "atlas", from = "src"}]
-include = ["src/atlas/*.sql"]
+include = [
+    "src/atlas/*.sql",
+    {path = "src/atlas/data/*.json", format = ["sdist", "wheel"]},
+]
 
 [tool.poetry.dependencies]
 python = ">=3.12, <3.13"

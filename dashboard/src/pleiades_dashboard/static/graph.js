@@ -22,7 +22,8 @@ function renderGraph(data) {
   });
   const selected = data.nodes.find(n => n.kind === "topic" && n.key === data.selected);
   $("graph-heading").textContent = selected?.label || "Your knowledge graph";
-  $("graph-notes").textContent = `${number(data.nodes.length)} nodes · ${number(data.edges.length)} connections in this bounded view. ${number(s.empty)} resources have no reported topics; ${number(s.unavailable)} were unavailable on their latest check.`;
+  const sampledCountries = new Set(data.nodes.filter(n => n.kind === "video" && n.country).map(n => n.country)).size;
+  $("graph-notes").textContent = `${number(data.nodes.length)} nodes · ${number(data.edges.length)} connections in this ${data.sampling === "country_stratified" ? `sample across ${number(sampledCountries)} known countries` : "bounded view"}. ${number(s.empty)} resources have no reported topics; ${number(s.unavailable)} were unavailable on their latest check.`;
   const canvas = $("graph-canvas");
   canvas.replaceChildren();
   if (!data.nodes.length) return empty(canvas, "Topics will appear as the background enrichment checks your existing collection. YouTube does not provide topics for every resource.");

@@ -3,6 +3,7 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from atlas.repositories.video.ingestion import VideoIngestionMixin
@@ -14,8 +15,9 @@ class FakeConnection:
         self.calls: list[tuple[str, tuple[Any, ...]]] = []
         self.commits = 0
 
-    async def execute(self, query: str, params: tuple[Any, ...]) -> None:
+    async def execute(self, query: str, params: tuple[Any, ...]) -> Any:
         self.calls.append((query, params))
+        return AsyncMock(fetchone=AsyncMock(return_value=("new",)))
 
     async def commit(self) -> None:
         self.commits += 1

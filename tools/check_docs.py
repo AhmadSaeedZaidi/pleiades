@@ -24,6 +24,7 @@ GUIDES = [
             "deploy",
             "contributing",
             "adaptive-scheduling",
+            "discovery",
             "tiered-storage",
             "knowledge-graph",
             "heartbeat",

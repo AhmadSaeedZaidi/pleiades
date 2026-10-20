@@ -11,6 +11,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from atlas.config import get_settings
 from atlas.notifications import AlertChannel, AlertLevel, notifier
 from atlas.repositories import ChannelRepository, SearchQueueRepository, VideoRepository
 from atlas.state import clear_quota_exhausted
@@ -19,6 +20,7 @@ from atlas.vault import get_vault
 from atlas.youtube import lookup_channels
 from prefect import flow
 
+from maia.discovery import DiscoveryContext, balance_candidates, prepare_discovery, snowball_terms
 from maia.quality import filter_by_quality
 from maia.strategies import YouTubeSearchStrategy
 from maia.utils import (
@@ -72,7 +74,9 @@ async def fetch_batch_task(batch_size: int) -> list[dict[str, Any]]:
 
 
 async def search_youtube_task(
-    topic: dict[str, Any], strategy: YouTubeSearchStrategy
+    topic: dict[str, Any],
+    strategy: YouTubeSearchStrategy,
+    context: DiscoveryContext | None = None,
 ) -> dict[str, Any] | None:
     """Search YouTube API for videos matching the topic query."""
     run_logger = logger
@@ -87,7 +91,8 @@ async def search_youtube_task(
             run_logger.info(f"Topic '{query}' token is stale. Resetting.")
             page_token = None
 
-    yesterday = datetime.now(UTC) - timedelta(hours=24)
+    lookback = get_settings().DISCOVERY_LOOKBACK_DAYS if context else 1
+    yesterday = datetime.now(UTC) - timedelta(days=lookback)
     published_after = yesterday.isoformat()
 
     params: dict[str, Any] = {
@@ -95,10 +100,13 @@ async def search_youtube_task(
         "q": query,
         "type": "video",
         "maxResults": 50,
-        "order": "date",
+        "order": "relevance" if context else "date",
         "publishedAfter": published_after,
     }
-    if page_token:
+    if context is not None:
+        # Bounded first pages avoid reusing a cursor with a changed search market.
+        params["regionCode"] = context.region
+    elif page_token:
         params["pageToken"] = page_token
 
     try:
@@ -163,6 +171,7 @@ async def ingest_results_task(
     topic: dict[str, Any],
     response: dict[str, Any],
     strategy: YouTubeSearchStrategy | None = None,
+    context: DiscoveryContext | None = None,
 ) -> None:
     """Store raw metadata to the vault, ingest structured metadata to the DB,
     enrich newly-discovered channels, snowball tags, and update topic state.
@@ -221,6 +230,10 @@ async def ingest_results_task(
         # the next cycle re-fetches these results once the API recovers.
         return
 
+    if context is not None:
+        items = await balance_candidates(items, context, executor)
+        await search_repo.set_geography_penalty(topic["id"], context.feedback_penalty)
+
     # Bundle ALL discovered videos into ONE vault commit to stay under
     # HuggingFace's 128-commits/hour account cap.
     v = get_vault()
@@ -230,7 +243,8 @@ async def ingest_results_task(
     for item in items:
         vid_id = video_id_of(item)
         if vid_id:
-            vault_items.append((f"metadata/{date_key}/{vid_id}.json", item))
+            public_item = {key: value for key, value in item.items() if not key.startswith("_")}
+            vault_items.append((f"metadata/{date_key}/{vid_id}.json", public_item))
 
     if vault_items:
         try:
@@ -246,10 +260,10 @@ async def ingest_results_task(
     # attempted before deciding whether the page can be acknowledged: a
     # successful upsert is durable and idempotent, while any failure must leave
     # the current page token unchanged so the next cycle replays the page.
-    async def _db_ingest(item: dict[str, Any]) -> None:
+    async def _db_ingest(item: dict[str, Any]) -> bool:
         vid_id = video_id_of(item)
         try:
-            await video_repo.ingest_video_metadata(item)
+            return await video_repo.ingest_video_metadata(item)
         except Exception as e:
             run_logger.exception(f"Failed to ingest video {vid_id} to database: {e}")
             raise
@@ -277,31 +291,38 @@ async def ingest_results_task(
         except Exception as e:
             run_logger.exception(f"Channel enrichment failed (non-fatal): {e}")
 
-    # Snowball tags are taken only from videos that passed the quality gate.
-    snowball_tags: list[str] = []
-    for item in items:
-        snippet = item.get("snippet", {})
-        tags = snippet.get("tags", [])
-        if tags and isinstance(tags, list):
-            valid_tags = [str(tag).strip() for tag in tags if tag and len(str(tag).strip()) > 0]
-            snowball_tags.extend(valid_tags)
-
-    if snowball_tags:
-        try:
-            added_count = await search_repo.add_terms(snowball_tags)
-            run_logger.info(
-                f"Snowball Effect: Added {added_count} unique tags to search queue "
-                f"(from {len(snowball_tags)} total tags)"
-            )
-        except Exception as e:
-            run_logger.exception(f"Failed to snowball tags into search queue: {e}")
+    if context is not None:
+        # The INSERT result is authoritative even with concurrent producers/replays.
+        inserted = {
+            video_id_of(item)
+            for item, result in zip(items, db_results, strict=True)
+            if result is True
+        }
+        context.novel_ids.intersection_update(inserted)
+        for penalty, terms in snowball_terms(items, context).items():
+            await search_repo.add_terms(terms, penalty=penalty)
+        logger.info(
+            "Discovery balance: %d admitted, %d held; market=%s; source pressure penalty=%d",
+            context.admitted,
+            context.held,
+            context.region,
+            context.feedback_penalty,
+        )
+    else:
+        snowball_tags: list[str] = []
+        for item in items:
+            tags = item.get("snippet", {}).get("tags", [])
+            if isinstance(tags, list):
+                snowball_tags.extend(str(tag).strip() for tag in tags if tag and str(tag).strip())
+        if snowball_tags:
+            await search_repo.add_terms(snowball_tags)
 
     try:
         await search_repo.update_state(
             topic["id"],
-            next_token,
+            None if context else next_token,
             len(items),
-            status="active" if next_token else "exhausted",
+            status="active" if context or next_token else "exhausted",
         )
     except Exception as e:
         run_logger.exception(f"Failed to update search state for topic {topic['id']}: {e}")
@@ -309,7 +330,7 @@ async def ingest_results_task(
 
     run_logger.info(
         f"Ingested {len(items)}/{len(raw_items)} videos for '{topic['query_term']}' "
-        f"(passed quality gate; snowballed {len(snowball_tags)} tags)"
+        "(passed discovery gates)"
     )
 
 
@@ -335,7 +356,9 @@ async def hunter_operation(
         "searches_failed": 0,
     }
 
+    context: DiscoveryContext | None = None
     try:
+        context = await prepare_discovery()
         targets = await fetch_batch_task(batch_size)
 
         if not targets:
@@ -347,11 +370,14 @@ async def hunter_operation(
 
         for topic in targets:
             try:
-                result = await search_youtube_task(topic, strategy)
+                result = await search_youtube_task(topic, strategy, context)
                 if result:
-                    await ingest_results_task(topic, result, strategy)
+                    admitted_before = context.admitted if context else 0
+                    await ingest_results_task(topic, result, strategy, context)
                     items = result.get("items", [])
-                    stats["videos_discovered"] += len(items)
+                    stats["videos_discovered"] += (
+                        context.admitted - admitted_before if context else len(items)
+                    )
                     stats["searches_successful"] += 1
                 else:
                     stats["searches_failed"] += 1
@@ -396,6 +422,10 @@ async def hunter_operation(
         raise
 
     clear_quota_exhausted("hunter")
+    if context is not None:
+        stats["videos_region_held"] = context.held
+        stats["videos_balanced_admitted"] = context.admitted
+
     return stats
 
 

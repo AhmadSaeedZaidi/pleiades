@@ -16,6 +16,7 @@ from atlas.state import clear_quota_exhausted
 from atlas.utils import QuotaExhaustedError
 from prefect import flow
 
+from maia.discovery import balance_candidates, prepare_discovery
 from maia.hunter.flow import enrich_channels_task
 from maia.quality import filter_by_quality
 from maia.strategies import YouTubeSearchStrategy
@@ -47,6 +48,7 @@ async def hunt_history_task(year: int, month: int, strategy: YouTubeSearchStrate
 
     run_logger.info(f"Archeologist digging in: {start_str} to {end_str}")
 
+    context = await prepare_discovery()
     for category in TARGET_CATEGORIES:
         params: dict[str, Any] = {
             "part": "snippet",
@@ -69,6 +71,8 @@ async def hunt_history_task(year: int, month: int, strategy: YouTubeSearchStrate
             # QUALITY GATE — enrich + filter before persisting / enriching.
             items = await filter_by_quality(raw_items, strategy.executor, logger=run_logger)
 
+            if context is not None:
+                items = await balance_candidates(items, context, strategy.executor)
             ingest_tasks = [
                 video_repo.ingest_video_metadata(item, priority_override=100) for item in items
             ]

@@ -20,6 +20,7 @@ from prefect import flow
 from prefect.client.orchestration import get_client
 from prefect.client.schemas.filters import FlowRunFilter, FlowRunFilterDeploymentId
 
+from maia.discovery import collect_discovery_metrics
 from maia.heartbeat.report import _knowledge_graph_field as _knowledge_graph_field
 from maia.heartbeat.report import build_report
 from maia.telemetry import cycle_monitor
@@ -181,10 +182,11 @@ async def heartbeat_operation(*, include_prefect: bool = False) -> dict[str, Any
     """Observe local work and bounded SQL snapshots; send one OPS report."""
     started = time.monotonic()
     services = await asyncio.to_thread(collect_service_status)
-    metrics, graph_metrics, storage_metrics = await asyncio.gather(
+    metrics, graph_metrics, storage_metrics, discovery_metrics = await asyncio.gather(
         _bounded_metrics("extraction", collect_pipeline_metrics),
         _bounded_metrics("graph", collect_knowledge_graph_metrics),
         _bounded_metrics("storage", collect_storage_metrics),
+        _bounded_metrics("discovery", collect_discovery_metrics),
     )
     disk = None
     try:
@@ -220,6 +222,7 @@ async def heartbeat_operation(*, include_prefect: bool = False) -> dict[str, Any
         pipeline=metrics,
         graph=graph_metrics,
         storage=storage_metrics,
+        discovery=discovery_metrics,
         workers=workers,
         disk=disk,
         topic_sync_enabled=settings.TOPIC_SYNC_ENABLED,
@@ -243,6 +246,7 @@ async def heartbeat_operation(*, include_prefect: bool = False) -> dict[str, Any
         "notified": notified,
         "metrics": metrics,
         "knowledge_graph": graph_metrics,
+        "discovery": discovery_metrics,
         "storage": storage_metrics,
         "workers": workers,
         "topic_sync_enabled": settings.TOPIC_SYNC_ENABLED,

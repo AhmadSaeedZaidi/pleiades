@@ -18,7 +18,7 @@ and live deployment remain separate checks.
 
 Remaining coordinated work:
 
-- Define discovery topics/languages and bound tag expansion to prevent self-reinforcing news clusters.
+- Review discovery's intended topics/languages and observed yields; the population prior is collection policy, not a YouTube supply estimate.
 
 - Durable, owner-specific work leases; prove stale workers cannot finalize new claims.
 - Normalize redundant video flags/phases and transcript/raw staging with reviewed migrations.

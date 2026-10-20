@@ -9,6 +9,7 @@ Current guides:
 - [Knowledge graph](knowledge-graph.md): observed YouTube Wikipedia classifications and bounded enrichment.
 - [Dashboard](../dashboard/README.md): access, configuration, and limits.
 - [Testing](testing.md): hermetic unit tests and guarded integration/live tiers.
+- [Discovery balance](discovery.md): population priors, concentration caps and bounded snowballing.
 - [Adaptive tracking](adaptive-scheduling.md): durable watchlist and cadence.
 - [Storage](tiered-storage.md): hot PostgreSQL and the artifact vault.
 - [API resilience](resiliency-strategy.md): key rings and quota handling.

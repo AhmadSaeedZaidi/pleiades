@@ -8,6 +8,8 @@ from typing import Any
 
 _COUNTERS = {
     "videos_updated",
+    "videos_region_held",
+    "videos_balanced_admitted",
     "videos_unavailable",
     "observed",
     "unavailable",

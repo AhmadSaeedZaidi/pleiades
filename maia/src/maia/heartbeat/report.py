@@ -68,6 +68,7 @@ def build_report(
     audio_configuration: str,
     collection_seconds: float,
     fleet: dict[str, tuple[str, str]] | None = None,
+    discovery: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     issues: list[str] = []
     executor_online = bool(services) and all(health == "healthy" for _, health in services.values())
@@ -152,6 +153,27 @@ def build_report(
             f"Unavailable cleanup: {progress.get('videos_retired', 0):,} parked · "
             f"{progress.get('videos_restored', 0):,} restored"
         )
+    if discovery is None:
+        fields["Discovery balance"] = "Metrics unavailable"
+        issues.append("discovery balance metrics unavailable")
+    else:
+        country = discovery["largest_country"]
+        share = discovery["largest_share"]
+        cap = discovery["max_country_share"]
+        fields["Discovery balance"] = (
+            f"Balancing: **{'on' if discovery['enabled'] else 'off'}** · Country cap: {cap:.0%}\n"
+            f"Largest (7d): **{country} {share:.1%}** · "
+            f"Population prior: {discovery['largest_prior']:.1%}\n"
+            f"Unknown country (7d): {discovery['unknown_share']:.1%}\n"
+            f"Observed: {progress.get('videos_balanced_admitted', 0):,} admitted · "
+            f"{progress.get('videos_region_held', 0):,} held\n"
+            "Channel-country metadata; limits govern new admissions."
+        )
+        if discovery["enabled"] and discovery["recent_total"] >= 100:
+            if share > cap:
+                issues.append(f"discovery concentrated: {country} {share:.1%}")
+            if discovery["unknown_share"] > discovery["unknown_cap"]:
+                issues.append("discovery country metadata incomplete")
     if disk is None:
         fields["Host disk"] = "Metrics unavailable"
         issues.append("disk metrics unavailable")
@@ -200,9 +222,9 @@ def build_report(
         "description": (
             "; ".join(issues) or "Executor online; observed cycles and metrics healthy"
         )[:700],
-        # Ten fields at <=500 chars leave room for title, description and footer
+        # Eleven fields at <=450 chars leave room for title, description and footer
         # under Discord's aggregate 6,000-character limit.
         "fields": {
-            key: value[:499] + "…" if len(value) > 500 else value for key, value in fields.items()
+            key: value[:449] + "…" if len(value) > 450 else value for key, value in fields.items()
         },
     }

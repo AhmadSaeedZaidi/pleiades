@@ -37,11 +37,27 @@ _GRAPH_METRICS = {
 
 @pytest.fixture(autouse=True)
 def graph_metrics():
-    with patch(
-        "maia.heartbeat.flow.collect_knowledge_graph_metrics",
-        new_callable=AsyncMock,
-        return_value=_GRAPH_METRICS,
-    ) as collector:
+    with (
+        patch(
+            "maia.heartbeat.flow.collect_discovery_metrics",
+            new_callable=AsyncMock,
+            return_value={
+                "enabled": True,
+                "max_country_share": 0.1,
+                "largest_country": "unknown",
+                "largest_share": 0,
+                "largest_prior": 0.05,
+                "unknown_share": 0,
+                "unknown_cap": 0.05,
+                "recent_total": 0,
+            },
+        ),
+        patch(
+            "maia.heartbeat.flow.collect_knowledge_graph_metrics",
+            new_callable=AsyncMock,
+            return_value=_GRAPH_METRICS,
+        ) as collector,
+    ):
         yield collector
 
 
@@ -464,3 +480,25 @@ async def test_artifact_inventory_survives_missing_pipeline_collector(reporting)
     fields = reporting[2].await_args.kwargs["fields"]
     assert fields["Artifact inventory (SQL)"] == "Metrics unavailable"
     assert "private database details" not in str(fields)
+
+
+async def test_discovery_concentration_is_visible_without_hiding_inventory(reporting):
+    with patch(
+        "maia.heartbeat.flow.collect_discovery_metrics",
+        new_callable=AsyncMock,
+        return_value={
+            "enabled": True,
+            "max_country_share": 0.1,
+            "largest_country": "IN",
+            "largest_share": 0.85,
+            "largest_prior": 0.043,
+            "unknown_share": 0.13,
+            "unknown_cap": 0.05,
+            "recent_total": 1000,
+        },
+    ):
+        summary = await heartbeat_operation()
+    fields = reporting[2].await_args.kwargs["fields"]
+    assert "IN 85.0%" in fields["Discovery balance"]
+    assert "discovery concentrated: IN 85.0%" in summary["issues"]
+    assert "Artifact inventory (SQL)" in fields

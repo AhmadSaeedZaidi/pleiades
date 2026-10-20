@@ -43,6 +43,7 @@ async def _load_channel_stats(
             "subscriber_count": _to_int(stats.get("subscriberCount")),
             "video_count": _to_int(stats.get("videoCount")),
             "published_at": (it.get("snippet", {}) or {}).get("publishedAt"),
+            "country": (it.get("snippet", {}) or {}).get("country"),
         }
     if logger is not None and not out:
         logger.warning(
@@ -151,6 +152,7 @@ async def filter_by_quality(
             cid = it.get("snippet", {}).get("channelId")
             ok, reason = evaluate_channel(cid, stats_map.get(cid), thresholds, now)
             if ok:
+                it["_channel_country"] = stats_map.get(cid, {}).get("country")
                 final.append(it)
             else:
                 rejected += 1

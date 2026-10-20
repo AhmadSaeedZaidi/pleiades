@@ -214,3 +214,25 @@ async def test_heartbeat_coverage_distinguishes_unobserved_empty_unavailable_and
     assert (result["video_total"], result["video_checked"]) == (2, 1)
     assert result["video_checked_1h"] == 0
     assert result["video_edges"] == 0
+
+
+async def test_graph_sample_interleaves_countries_without_deleting_existing_facts(graph_pool):
+    async with graph_pool.get_connection() as conn:
+        await conn.execute("""
+            UPDATE channels SET country='IN' WHERE id='c1';
+            INSERT INTO channels(id,title,country) VALUES ('ng','Other publisher','NG');
+            INSERT INTO videos(id,title,channel_id,discovered_at)
+                SELECT 'india'||i,'Recent video '||i,'c1',now()
+                FROM generate_series(1,15) i;
+            INSERT INTO videos(id,title,channel_id,discovered_at)
+                VALUES ('older-ng','Older video','ng',now()-interval '7 days');
+        """)
+        for key in [*(f"india{i}" for i in range(1, 16)), "older-ng"]:
+            await record_topic_snapshot(
+                conn, "video", {"id": key, "topicDetails": {"topicCategories": [URL]}}
+            )
+    result = await KnowledgeGraphReader(graph_pool.rows).graph(topic=URL, limit=3)
+    videos = [node for node in result["nodes"] if node["kind"] == "video"]
+    assert {node["country"] for node in videos} == {"IN", "NG"}
+    assert len(videos) == 3 and result["sampling"] == "country_stratified"
+    assert result["summary"]["video_edges"] == 16

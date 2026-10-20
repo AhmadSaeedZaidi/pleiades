@@ -16,7 +16,10 @@ from maia.hunter.flow import (
 @pytest.fixture(autouse=True)
 def mock_channel_enrichment():
     """Keep discovery unit tests hermetic; enrollment belongs to VideoRepository."""
-    with patch("maia.hunter.flow.enrich_channels_task", new_callable=AsyncMock, return_value=0):
+    with (
+        patch("maia.hunter.flow.enrich_channels_task", new_callable=AsyncMock, return_value=0),
+        patch("maia.hunter.flow.prepare_discovery", new_callable=AsyncMock, return_value=None),
+    ):
         yield
 
 

@@ -68,7 +68,11 @@ select a canonical Wikipedia URL. Search is capped at 120 characters; the view
 caps at 50 videos, 20 directly classified channels, and 12 related topics.
 Exports identify `pleiades.topic-graph.v1`, `sampled: true`, and whether the view
 uses demo data. They contain included nodes and provenance-bearing edges, not
-the whole database.
+the whole database. Video and channel samples interleave channel-country cohorts
+before adding another result from the same country. This prevents a recently
+collected regional cluster from monopolizing the bounded view. Exports label
+`sampling: country_stratified` and include available country metadata; this is a
+view-selection policy and does not claim the stored graph is geographically balanced.
 
 ## Discord heartbeat
 

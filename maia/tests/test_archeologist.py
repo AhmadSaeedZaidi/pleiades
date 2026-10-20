@@ -10,6 +10,14 @@ from atlas.utils import QuotaExhaustedError
 from maia.archeologist.flow import archeology_operation, hunt_history_task
 
 
+@pytest.fixture(autouse=True)
+def mock_discovery_preparation():
+    with patch(
+        "maia.archeologist.flow.prepare_discovery", new_callable=AsyncMock, return_value=None
+    ):
+        yield
+
+
 @pytest.fixture
 def mock_strategy() -> MagicMock:
     strategy = MagicMock()

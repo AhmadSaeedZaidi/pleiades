@@ -63,7 +63,8 @@ class VideoIngestionMixin(DatabaseAdapter):
 
     async def ingest_video_metadata(
         self, video_data: dict[str, Any], priority_override: int | None = None
-    ) -> None:
+    ) -> bool:
+        """Persist metadata atomically; return whether this call inserted a new video."""
         from datetime import UTC, datetime
 
         snippet = video_data.get("snippet", {})
@@ -102,8 +103,7 @@ class VideoIngestionMixin(DatabaseAdapter):
                     tags, category_id, default_language, discovered_at
                 )
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (id) DO UPDATE SET
-                    duration = COALESCE(EXCLUDED.duration, videos.duration)
+                ON CONFLICT (id) DO NOTHING RETURNING id
             """
             vid_id = video_data.get("id")
             if isinstance(vid_id, dict):
@@ -111,13 +111,13 @@ class VideoIngestionMixin(DatabaseAdapter):
 
             if not vid_id:
                 await conn.commit()
-                return
+                return False
 
             # Duration only comes from contentDetails, present when enriched via
             # videos.list (search snippets omit it).
             duration = _parse_iso_duration(video_data.get("contentDetails", {}).get("duration"))
 
-            await conn.execute(
+            inserted_cursor = await conn.execute(
                 video_query,
                 (
                     vid_id,
@@ -131,6 +131,12 @@ class VideoIngestionMixin(DatabaseAdapter):
                     datetime.now(UTC),
                 ),
             )
+            inserted = await inserted_cursor.fetchone() is not None
+            if not inserted:
+                await conn.execute(
+                    "UPDATE videos SET duration=COALESCE(%s,duration) WHERE id=%s",
+                    (duration, vid_id),
+                )
             # Enrollment belongs to the ingestion transaction, not to an
             # individual producer. Hunter, Archeologist, MCP/live tools, and
             # future callers therefore cannot create an untracked video row.
@@ -144,6 +150,7 @@ class VideoIngestionMixin(DatabaseAdapter):
             )
             await record_topic_snapshot(conn, "video", {**video_data, "id": vid_id})
             await conn.commit()
+            return inserted
 
 
 _CHANNEL_TITLE_PENDING = "Pending channel index"

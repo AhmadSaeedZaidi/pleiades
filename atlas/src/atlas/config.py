@@ -191,6 +191,45 @@ class Settings(BaseSettings):  # type: ignore[misc]
         description="Regexes (title/description/tags) indicating copyrighted re-uploaded content.",
     )
 
+    DISCOVERY_BALANCE_ENABLED: bool = True
+    DISCOVERY_POPULATION_EXPONENT: float = Field(0.5, ge=0, le=1)
+    DISCOVERY_MAX_COUNTRY_SHARE: float = Field(0.1, gt=0, le=1)
+    DISCOVERY_UNKNOWN_COUNTRY_SHARE: float = Field(0.05, ge=0, lt=1)
+    DISCOVERY_PENALTY_WEIGHT: int = Field(30, ge=1, le=100)
+    DISCOVERY_QUERY_COOLDOWN_HOURS: int = Field(12, ge=1, le=168)
+    DISCOVERY_LOOKBACK_DAYS: int = Field(7, ge=1, le=30)
+    DISCOVERY_MAX_TAGS_PER_VIDEO: int = Field(3, ge=0, le=10)
+    DISCOVERY_MAX_TERMS_PER_PAGE: int = Field(20, ge=0, le=50)
+    DISCOVERY_MENTION_CAP: int = Field(10, ge=1, le=100)
+    DISCOVERY_SEED_TERMS: list[str] = Field(
+        default_factory=lambda: [
+            "astronomy documentary",
+            "biology lecture",
+            "chemistry explained",
+            "physics lecture",
+            "mathematics explained",
+            "world history documentary",
+            "archaeology documentary",
+            "engineering explained",
+            "computer science lecture",
+            "geography documentary",
+            "ocean science",
+            "ecology documentary",
+            "agriculture science",
+            "architecture history",
+            "classical music history",
+            "literature lecture",
+            "philosophy lecture",
+            "economics explained",
+            "art history documentary",
+            "medicine research",
+            "renewable energy technology",
+            "space exploration",
+            "linguistics lecture",
+            "anthropology documentary",
+        ]
+    )
+
     SEARCH_QUEUE_MENTION_WEIGHT: float = Field(
         1.5, description="Weight applied to mention_count in the queue score."
     )

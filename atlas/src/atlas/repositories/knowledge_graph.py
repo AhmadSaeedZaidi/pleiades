@@ -37,6 +37,7 @@ def graph_projection(
             video["id"],
             video["title"],
             status=video["status"],
+            country=video.get("country"),
             url=f"https://www.youtube.com/watch?v={video['id']}",
         )
         if video.get("channel_id"):
@@ -45,6 +46,7 @@ def graph_projection(
                 video["channel_id"],
                 video.get("channel") or video["channel_id"],
                 url=f"https://www.youtube.com/channel/{video['channel_id']}",
+                country=video.get("country"),
             )
             edge(video_id, channel_id, "PUBLISHED_BY", provenance="youtube.snippet.channelId")
     for channel in direct_channels:
@@ -53,6 +55,7 @@ def graph_projection(
             channel["id"],
             channel["title"],
             url=f"https://www.youtube.com/channel/{channel['id']}",
+            country=channel.get("country"),
         )
         edge(
             channel_id,
@@ -119,16 +122,25 @@ class KnowledgeGraphReader:
         facts: list[dict[str, Any]] = []
         if topics:
             videos = await self.rows(
-                """SELECT v.id,v.title,v.channel_id,v.status,c.title AS channel
-                FROM video_topics t JOIN videos v ON v.id=t.video_id
-                LEFT JOIN channels c ON c.id=v.channel_id
-                WHERE t.topic_url=%s ORDER BY v.discovered_at DESC,v.id LIMIT %s""",
+                """WITH candidates AS (
+                    SELECT v.id,v.title,v.channel_id,v.status,c.title AS channel,c.country,
+                        v.discovered_at,
+                        row_number() OVER (PARTITION BY COALESCE(NULLIF(upper(trim(c.country)),''),
+                            'unknown') ORDER BY v.discovered_at DESC,v.id) AS country_position
+                    FROM video_topics t JOIN videos v ON v.id=t.video_id
+                    LEFT JOIN channels c ON c.id=v.channel_id WHERE t.topic_url=%s)
+                SELECT * FROM candidates
+                ORDER BY country_position,discovered_at DESC,id LIMIT %s""",
                 (selected, limit),
             )
             channels = await self.rows(
-                """SELECT c.id,c.title,t.observed_at
-                FROM channel_topics t JOIN channels c ON c.id=t.channel_id
-                WHERE t.topic_url=%s ORDER BY c.id LIMIT 20""",
+                """WITH candidates AS (
+                    SELECT c.id,c.title,c.country,t.observed_at,
+                        row_number() OVER (PARTITION BY COALESCE(NULLIF(upper(trim(c.country)),''),
+                            'unknown') ORDER BY c.id) AS country_position
+                    FROM channel_topics t JOIN channels c ON c.id=t.channel_id
+                    WHERE t.topic_url=%s)
+                SELECT * FROM candidates ORDER BY country_position,id LIMIT 20""",
                 (selected,),
             )
             ids = [v["id"] for v in videos]
@@ -156,5 +168,6 @@ class KnowledgeGraphReader:
             "edges": edges,
             "video_limit": limit,
             "sampled": True,
+            "sampling": "country_stratified",
             "schema": "pleiades.topic-graph.v1",
         }
