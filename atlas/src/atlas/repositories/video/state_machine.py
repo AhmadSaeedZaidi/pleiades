@@ -435,6 +435,29 @@ class VideoStateMixin(DatabaseAdapter):
         )
         return [row["id"] for row in rows]
 
+    async def retry_failed_visuals(self, video_ids: list[str]) -> list[str]:
+        """Requeue an explicitly diagnosed cohort with all prerequisite artifacts intact.
+
+        This is operator recovery, not automatic retry of unknown failures. Keep
+        legacy failures, retired sources, and other stages untouched.
+        """
+        ids = list(dict.fromkeys(video_ids))
+        if len(ids) > 100:
+            raise ValueError("Visual recovery requires at most 100 explicit IDs")
+        if not ids:
+            return []
+        rows = await self._fetch_all(
+            """UPDATE videos SET visuals_phase='PENDING', last_updated_at=now()
+               WHERE id=ANY(%s) AND status IN ('PENDING','PROCESSING')
+                 AND retired_at IS NULL AND visuals_phase='FAILED' AND has_visuals=FALSE
+                 AND fetched=TRUE AND raw_phase='DONE' AND raw_uri IS NOT NULL
+                 AND audio_phase='DONE' AND transcript_phase='DONE'
+                 AND clip_phase <> 'PROCESSING'
+               RETURNING id""",
+            (ids,),
+        )
+        return [row["id"] for row in rows]
+
     async def unmark_transcript(self, video_id: str) -> None:
         """Revert a video to needing a transcript so the Scribe re-extracts it
         (has_visuals left untouched)."""

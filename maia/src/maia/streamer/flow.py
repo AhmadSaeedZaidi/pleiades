@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import shutil
+import subprocess
 import tempfile
 import time
 from typing import Any
@@ -124,7 +125,7 @@ async def fetch_source_task(
         await video_repo.release_raw_to_pending(vid_id)
         _note_rate_limit()
         return None
-    except AudioExtractionError as e:
+    except (AudioExtractionError, subprocess.TimeoutExpired, OSError) as e:
         # Likely transient (throttle / network) — release to PENDING for retry
         # rather than marking FAILED, so a bad hour doesn't strand the video.
         run_logger.warning(f"Raw fetch failed for {vid_id}, releasing: {e}")
@@ -142,6 +143,7 @@ class StreamerAgent(BaseBatchAgent):
     """Streamer Agent: fetch YouTube sources for the singer to extract."""
 
     name = "streamer"
+    progress_counter = "raw_stored"
     default_batch_size = 5
     max_concurrent = MAX_CONCURRENT_VIDEOS
     throttle_seconds = STREAMER_THROTTLE_SECONDS
@@ -152,10 +154,10 @@ class StreamerAgent(BaseBatchAgent):
     async def process_one(self, video: Video) -> tuple[str, str, bytes, bytes | None] | None:
         return await fetch_source_task(video)
 
-    async def store_results(self, results: list[Any]) -> None:
+    async def store_results(self, results: list[Any]) -> int:
         fetched = [r for r in results if isinstance(r, tuple) and len(r) == 4]
         if not fetched:
-            return
+            return 0
         items: list[tuple[str, bytes]] = []
         vids: list[str] = []
         id_uri: dict[str, str] = {}
@@ -166,15 +168,16 @@ class StreamerAgent(BaseBatchAgent):
             vids.append(_id)
             id_uri[_id] = raw_uri
 
-        await commit_artifacts(
+        completed = await commit_artifacts(
             items=items,
             video_ids=vids,
             mark_safe=lambda vid: VideoRepository().mark_fetched(vid, id_uri[vid]),
-            on_failure=lambda vid: VideoRepository().mark_step_failed(vid, "raw"),
+            on_failure=VideoRepository().release_raw_to_pending,
             label="videos' raw+meta",
             store=vault_op_with_retry,
             vault=get_vault(),
         )
+        return len(completed)
 
     async def run(self, batch_size: int | None = None, **kwargs: Any) -> dict[str, Any]:
         """Run the plain Streamer operation (without Prefect context)."""

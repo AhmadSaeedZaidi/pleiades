@@ -40,3 +40,14 @@ def test_find_audio_file_ignores_other_videos(tmp_path: Path) -> None:
     found = _find_audio_file(tmp_path, vid)
     assert found is not None
     assert found.name == f"{vid}.m4a"
+
+
+def test_node_fallback_keeps_its_actual_runtime_name(tmp_path):
+    from maia.media.streamer import _runtime_args
+
+    node = tmp_path / "node"
+    node.touch()
+    assert _runtime_args([("deno", str(tmp_path / "absent")), ("node", str(node))]) == [
+        "--js-runtimes",
+        f"node:{node}",
+    ]

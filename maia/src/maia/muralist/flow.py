@@ -108,6 +108,7 @@ class MuralistAgent(BaseBatchAgent):
     """Muralist Agent: full-video archival ("super painter"). Manual-only."""
 
     name = "muralist"
+    progress_counter = "clips_stored"
     default_batch_size = 5
     max_concurrent = MAX_CONCURRENT_VIDEOS
     throttle_seconds = MURALIST_THROTTLE_SECONDS
@@ -119,15 +120,15 @@ class MuralistAgent(BaseBatchAgent):
     async def process_one(self, video: Video) -> tuple[str, bytes, str] | None:
         return await process_video_task(video)
 
-    async def store_results(self, results: list[Any]) -> None:
+    async def store_results(self, results: list[Any]) -> int:
         extracted: list[tuple[str, bytes, str]] = [
             r for r in results if isinstance(r, tuple) and len(r) == 3
         ]
         if not extracted:
-            return
+            return 0
         items = [(video_path(vid, ext), data) for vid, data, ext in extracted]
         vids = [vid for vid, _data, _ext in extracted]
-        await commit_artifacts(
+        completed = await commit_artifacts(
             items=items,
             video_ids=vids,
             mark_safe=VideoRepository().mark_video_safe,
@@ -136,6 +137,7 @@ class MuralistAgent(BaseBatchAgent):
             store=vault_op_with_retry,
             vault=get_vault(),
         )
+        return len(completed)
 
 
 def main() -> None:

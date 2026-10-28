@@ -49,17 +49,23 @@ _YTDLP_BASE = [
     "Chrome-131",
 ]
 
+
 # yt-dlp 2026 renamed --js-runtime -> --js-runtimes and requires Deno >= 2.3.0;
 # this is the single place that fact is encoded.
-_JS_RUNTIME: list[str] = []
-for _candidate in (
-    shutil.which("deno"),
-    "/home/ubuntu/.deno/bin/deno",
-    shutil.which("node"),
-):
-    if _candidate and Path(_candidate).exists():
-        _JS_RUNTIME = ["--js-runtimes", f"deno:{_candidate}"]
-        break
+def _runtime_args(candidates: list[tuple[str, str | None]]) -> list[str]:
+    for runtime, path in candidates:
+        if path and Path(path).exists():
+            return ["--js-runtimes", f"{runtime}:{path}"]
+    return []
+
+
+_JS_RUNTIME = _runtime_args(
+    [
+        ("deno", shutil.which("deno")),
+        ("deno", "/home/ubuntu/.deno/bin/deno"),
+        ("node", shutil.which("node")),
+    ]
+)
 
 
 class StreamRateLimitError(Exception):
@@ -273,7 +279,7 @@ class StealthVideoStreamer:
         sorted_points = sorted(valid_points, key=lambda x: x.get("value", 0), reverse=True)
         return [p.get("start_time", 0.0) for p in sorted_points[:top_n]]
 
-    def extract_audio(self, video_id: str, dest_dir: str, player_clients: str = "web,tv") -> Path:
+    def extract_audio(self, video_id: str, dest_dir: str, player_clients: str = "default") -> Path:
         """Download *video_id*'s audio into *dest_dir* and return the opus path.
 
         Speech-optimised: mono, 16 kHz, 32 kbps opus (~1 MB / 5 min).
@@ -311,7 +317,7 @@ class StealthVideoStreamer:
         self,
         video_id: str,
         dest_dir: str,
-        player_clients: str = "web,tv",
+        player_clients: str = "default",
     ) -> tuple[Path, Path | None]:
         """Unified YouTube ingress: download the audio + metadata for *video_id*
         in a SINGLE yt-dlp invocation.
@@ -384,7 +390,7 @@ class StealthVideoStreamer:
             raise AudioExtractionError(f"yt-dlp exited OK but no audio file found for {video_id}")
         return audio_path, info_path
 
-    def download_raw(self, video_id: str, dest_dir: str, player_clients: str = "web,tv") -> Path:
+    def download_raw(self, video_id: str, dest_dir: str, player_clients: str = "default") -> Path:
         """Download *video_id*'s best audio stream (no ffmpeg re-encode).
 
         This is the network-heavy, rate-limit-prone step. The file keeps its

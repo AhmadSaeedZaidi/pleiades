@@ -136,6 +136,19 @@ class VideoTrackingMixin(DatabaseAdapter):
                 COUNT(*) FILTER (WHERE has_audio) AS audios,
                 COUNT(*) FILTER (WHERE fetched) AS raw_sources,
                 COUNT(*) FILTER (WHERE has_video) AS full_clips,
+                COUNT(*) FILTER (WHERE retired_at IS NULL
+                    AND status IN ('PENDING','PROCESSING') AND NOT fetched
+                    AND raw_phase <> 'FAILED' AND (last_updated_at IS NULL OR
+                        last_updated_at < NOW()-INTERVAL '15 minutes')) AS ready_raw,
+                COUNT(*) FILTER (WHERE retired_at IS NULL
+                    AND status IN ('PENDING','PROCESSING','PROCESSED') AND fetched
+                    AND NOT has_audio AND audio_phase <> 'FAILED') AS ready_audio,
+                COUNT(*) FILTER (WHERE retired_at IS NULL
+                    AND status IN ('PENDING','PROCESSING') AND fetched
+                    AND NOT has_visuals AND visuals_phase <> 'FAILED') AS ready_visuals,
+                COUNT(*) FILTER (WHERE retired_at IS NULL
+                    AND status IN ('PENDING','PROCESSING') AND NOT has_transcript
+                    AND transcript_phase <> 'FAILED') AS ready_transcripts,
                 COUNT(*) FILTER (WHERE discovered_at > NOW() - INTERVAL '1 hour') AS ingested_1h,
                 COUNT(*) FILTER (WHERE last_tracked_at IS NOT NULL) AS tracked_ever,
                 COUNT(*) FILTER (WHERE last_tracked_at > %s) AS tracked_1h,
@@ -205,6 +218,10 @@ class VideoTrackingMixin(DatabaseAdapter):
             "audios": agg.get("audios") or 0,
             "raw_sources": agg.get("raw_sources") or 0,
             "full_clips": agg.get("full_clips") or 0,
+            **{
+                key: agg.get(key) or 0
+                for key in ("ready_raw", "ready_audio", "ready_visuals", "ready_transcripts")
+            },
             "ingested_1h": agg.get("ingested_1h") or 0,
             "tracked_ever": agg.get("tracked_ever") or 0,
             "tracked_1h": agg.get("tracked_1h") or 0,

@@ -360,6 +360,7 @@ class PainterAgent(BaseBatchAgent):
     """Painter Agent: video keyframe extraction."""
 
     name = "painter"
+    progress_counter = "visuals_stored"
     default_batch_size = 5
     max_concurrent = MAX_CONCURRENT_VIDEOS
     raise_on = (QuotaExhaustedError,)
@@ -373,7 +374,7 @@ class PainterAgent(BaseBatchAgent):
         await asyncio.sleep(random.uniform(0.5, 2.0))
         return await process_frames_task(video)
 
-    async def store_results(self, results: list[Any]) -> None:
+    async def store_results(self, results: list[Any]) -> int:
         # Write the whole batch to the vault in ONE commit to stay under
         # HuggingFace's 128-commits/hour account cap; failed/RELEASED videos are
         # absent here. (Painter's vault API is bespoke — store_visual_evidence_batch
@@ -382,19 +383,23 @@ class PainterAgent(BaseBatchAgent):
             r for r in results if isinstance(r, tuple)
         ]
         if not extracted:
-            return
+            return 0
         video_repo = VideoRepository()
         v = get_vault()
         entries = [(vid, frames, FRAME_FORMAT) for vid, frames in extracted]
+        completed: set[str] = set()
         try:
             await vault_op_with_retry(lambda: v.store_visual_evidence_batch(entries))
             for vid, _ in extracted:
                 await video_repo.mark_visuals_safe(vid)
+                completed.add(vid)
             logger.info(f"Batched {len(extracted)} videos' frames into ONE vault commit")
         except Exception as e:
             logger.exception(f"Batched frame store failed ({len(extracted)} vids): {e}")
             for vid, _ in extracted:
-                await video_repo.mark_step_failed(vid, "visuals")
+                if vid not in completed:
+                    await video_repo.release_visuals_to_pending(vid)
+        return len(completed)
 
 
 async def painter_operation(batch_size: int | None = None, **kwargs: Any) -> dict[str, Any]:

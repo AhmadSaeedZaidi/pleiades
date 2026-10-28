@@ -2,6 +2,7 @@
 Tests for Maia Streamer module (YouTube source fetcher; network pull only).
 """
 
+import subprocess
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -223,7 +224,7 @@ async def test_run_streamer_cycle_batched_store():
 
 
 @pytest.mark.asyncio
-async def test_run_streamer_cycle_vault_failure_marks_failed():
+async def test_run_streamer_cycle_vault_failure_releases_for_retry():
     from atlas.models import Video
 
     mock_videos = [Video(id="VIDEO_001", title="T1")]
@@ -251,12 +252,15 @@ async def test_run_streamer_cycle_vault_failure_marks_failed():
         mock_repo = MockRepo.return_value
         mock_repo.mark_fetched = AsyncMock()
         mock_repo.mark_step_failed = AsyncMock()
+        mock_repo.release_raw_to_pending = AsyncMock()
         mock_vault = mock_get_vault.return_value
         mock_vault.store_batch = MagicMock()
 
-        await streamer_flow.fn(batch_size=1)
+        result = await streamer_flow.fn(batch_size=1)
 
-        mock_repo.mark_step_failed.assert_called_once_with("VIDEO_001", "raw")
+        mock_repo.release_raw_to_pending.assert_awaited_once_with("VIDEO_001")
+        mock_repo.mark_step_failed.assert_not_awaited()
+        assert result["raw_stored"] == 0 and result["videos_failed"] == 1
         mock_repo.mark_fetched.assert_not_called()
 
 
@@ -301,7 +305,7 @@ def test_download_unified_command_uses_web_clients_and_audio_fallback(tmp_path):
     command = run.call_args.args[0]
     assert audio_path.name == "VID.webm"
     assert info is None
-    assert "youtube:player_client=web,tv" in command
+    assert "youtube:player_client=default" in command
     assert command[command.index("-f") + 1] == "bestaudio/best"
 
 
@@ -325,7 +329,7 @@ def test_audio_commands_default_to_web_clients(tmp_path, method, filename):
         getattr(streamer, method)("VID", str(tmp_path))
 
     command = run.call_args.args[0]
-    assert "youtube:player_client=web,tv" in command
+    assert "youtube:player_client=default" in command
     assert command[command.index("-f") + 1] == "bestaudio/best"
 
 
@@ -410,3 +414,21 @@ async def test_streamer_run_clears_cooldown_on_clean_cycle():
 
     mock_clear.assert_called_once_with("streamer")
     mock_bump.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "error", [subprocess.TimeoutExpired("download", 300), OSError("temporary disk failure")]
+)
+async def test_raw_infrastructure_errors_release_instead_of_poisoning_the_source(error):
+    from atlas.models import Video
+
+    with (
+        patch("maia.streamer.flow.VideoRepository") as repo,
+        patch("maia.streamer.flow.StealthVideoStreamer") as streamer,
+    ):
+        repo.return_value.release_raw_to_pending = AsyncMock()
+        repo.return_value.mark_step_failed = AsyncMock()
+        streamer.return_value.download_unified.side_effect = error
+        assert await fetch_source_task(Video(id="input", title="video")) is None
+    repo.return_value.release_raw_to_pending.assert_awaited_once_with("input")
+    repo.return_value.mark_step_failed.assert_not_awaited()

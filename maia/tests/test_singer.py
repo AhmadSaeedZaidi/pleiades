@@ -277,6 +277,7 @@ async def test_singer_commits_incrementally_at_bounded_video_groups():
 
     async def store(results):
         trace.append(f"store:{len(results)}")
+        return len(results)
 
     agent = SingerAgent()
     agent.throttle_seconds = 0
@@ -287,7 +288,8 @@ async def test_singer_commits_incrementally_at_bounded_video_groups():
     with patch("maia.singer.flow.clear_quota_exhausted"):
         result = await agent.run(batch_size=6)
 
-    assert result == {"videos_processed": 6}
+    assert result["videos_attempted"] == result["audio_stored"] == 6
+    assert result["videos_failed"] == 0
     assert trace == [
         "process:VIDEO_000",
         "process:VIDEO_001",

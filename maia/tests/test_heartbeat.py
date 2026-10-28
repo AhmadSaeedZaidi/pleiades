@@ -223,6 +223,10 @@ _METRICS = {
     "transcripts": 0,
     "with_visuals": 0,
     "audios": 0,
+    "ready_raw": 0,
+    "ready_audio": 0,
+    "ready_visuals": 0,
+    "ready_transcripts": 0,
     "ingested_1h": 0,
 }
 _STORAGE = {
@@ -456,7 +460,7 @@ async def test_artifact_inventory_restores_counts_without_losing_health_fields(r
     assert "Transcripts: **12,345**" in inventory
     assert "Raw sources: **5,432**" in inventory
     assert "Full clips: **12**" in inventory
-    assert "archived vault totals excluded" in inventory
+    assert "audio/visual flags clear at archival" in inventory
     assert "Tracker" not in inventory
     assert "Knowledge graph" in fields and "Hot / cold storage" in fields
     assert "Videos with failed stages" in fields["Extraction"]
@@ -471,7 +475,9 @@ async def test_missing_artifact_metrics_are_unavailable_instead_of_zero(reportin
     await heartbeat_operation()
     inventory = reporting[2].await_args.kwargs["fields"]["Artifact inventory (SQL)"]
     assert inventory.count("unavailable") == 5
-    assert "**0**" not in inventory
+    assert "Audio tracks: unavailable" in inventory
+    assert "Visual sets: unavailable" in inventory
+    assert "Transcripts: unavailable" in inventory
 
 
 async def test_artifact_inventory_survives_missing_pipeline_collector(reporting):

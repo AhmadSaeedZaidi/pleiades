@@ -22,7 +22,7 @@ from atlas.state import clear_quota_exhausted
 from atlas.vault import audio_path, get_vault
 from prefect import flow
 
-from maia.base import BaseBatchAgent
+from maia.base import BaseBatchAgent, extraction_stats
 from maia.media.streamer import (
     AudioExtractionError,
     extract_audio_chunk,
@@ -161,6 +161,7 @@ class SingerAgent(BaseBatchAgent):
     """Singer Agent: extract + store audio (no transcription)."""
 
     name = "singer"
+    progress_counter = "audio_stored"
     default_batch_size = 10
     max_concurrent = MAX_CONCURRENT_VIDEOS
     throttle_seconds = SINGER_THROTTLE_SECONDS
@@ -191,6 +192,7 @@ class SingerAgent(BaseBatchAgent):
 
         run_logger.info(f"Processing {len(targets)} items sequentially...")
         pending: list[Any] = []
+        stored = 0
         for video in targets:
             try:
                 result = await self.process_one(video)
@@ -206,35 +208,38 @@ class SingerAgent(BaseBatchAgent):
             if result is not None:
                 pending.append(result)
             if len(pending) >= SINGER_COMMIT_BATCH_SIZE:
-                await self.store_results(pending)
+                stored += await self.store_results(pending)
                 pending = []
 
             if self.throttle_seconds:
                 await asyncio.sleep(self.throttle_seconds)
 
         if pending:
-            await self.store_results(pending)
+            stored += await self.store_results(pending)
 
         if self.clear_quota_after_cycle:
             clear_quota_exhausted(self.name)
         await self.after_cycle()
 
         run_logger.info(
-            f"=== {self.name.capitalize()} Cycle Complete === Processed {len(targets)} items"
+            "=== Singer Cycle Complete === Attempted %d, stored %d, unsuccessful %d",
+            len(targets),
+            stored,
+            len(targets) - stored,
         )
-        return {"videos_processed": len(targets)}
+        return extraction_stats(len(targets), stored, self.progress_counter)
 
-    async def store_results(self, results: list[Any]) -> None:
+    async def store_results(self, results: list[Any]) -> int:
         # store_audio_task returns a per-video *list* of chunks; flatten only
         # the bounded commit group supplied by SingerAgent.run.
         extracted: list[tuple[str, str, bytes]] = [
             item for r in results if isinstance(r, list) for item in r
         ]
         if not extracted:
-            return
+            return 0
         items: list[tuple[str, bytes]] = [(rel, data) for _vid, rel, data in extracted]
         vids = [_vid for _vid, _rel, _data in extracted]
-        await commit_artifacts(
+        completed = await commit_artifacts(
             items=items,
             video_ids=vids,
             mark_safe=VideoRepository().mark_audio_safe,
@@ -247,8 +252,9 @@ class SingerAgent(BaseBatchAgent):
         # once BOTH consumers have derived their output, so the painter never
         # finds its input gone.
         repo = VideoRepository()
-        for vid in dict.fromkeys(vids):
+        for vid in completed:
             await repo.reclaim_raw_if_complete(vid)
+        return len(completed)
 
 
 async def singer_operation(batch_size: int | None = None, **kwargs: Any) -> dict[str, Any]:

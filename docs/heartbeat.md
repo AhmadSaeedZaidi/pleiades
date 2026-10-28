@@ -18,6 +18,13 @@ The report includes:
   transcript rows, so these are current SQL counts, not total vault inventory.
   Collection adds two filtered counts to the existing video aggregate; it does
   not list the vault or call paid APIs.
+- Ready inputs for raw, audio, visual and transcript extraction, excluding
+  archived, retired and legacy failed videos. A large cumulative raw count does
+  not imply an audio backlog: archived sources no longer enter Singer's queue.
+- Observed durable raw/audio/visual outputs and staged transcripts, separately
+  from attempts. Transcript notices are reported separately from real text.
+  Storage failures and handled extraction failures now flag partial cycles;
+  an agent returning normally does not by itself establish successful output.
 - Discovery concentration, the population prior and country cap, missing country
   metadata and observed admissions/holds. See [discovery balance](discovery.md).
 - Tracking updates, durable due work and SQL metric rows.

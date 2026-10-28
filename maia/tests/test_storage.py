@@ -74,3 +74,20 @@ async def test_commit_artifacts_rolls_back_on_store_failure():
 
     mark_safe.assert_not_awaited()
     on_failure.assert_awaited_once_with("x")
+
+
+async def test_commit_returns_only_durably_marked_videos_on_partial_marker_failure():
+    fake_vault = _Vault(MagicMock())
+    mark = AsyncMock(side_effect=[None, RuntimeError("marker unavailable")])
+    release = AsyncMock()
+    result = await commit_artifacts(
+        items=[("x", b"a"), ("y", b"b")],
+        video_ids=["x", "y"],
+        mark_safe=mark,
+        on_failure=release,
+        label="audio",
+        store=_run_lambda,
+        vault=fake_vault,
+    )
+    assert result == {"x"}
+    release.assert_awaited_once_with("y")

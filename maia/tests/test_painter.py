@@ -398,7 +398,7 @@ async def test_process_frames_handles_video_capture_failure():
 
 @pytest.mark.asyncio
 async def test_run_painter_cycle_handles_vault_failure():
-    """Test run_painter_cycle marks videos FAILED when the batched vault write fails."""
+    """Transient storage failures release frames for retry and report no success."""
     from atlas.models import Video
 
     mock_videos = [Video(id="VIDEO_001", title="Test Video")]
@@ -423,13 +423,15 @@ async def test_run_painter_cycle_handles_vault_failure():
         mock_repo = MockRepo.return_value
         mock_repo.mark_visuals_safe = AsyncMock()
         mock_repo.mark_step_failed = AsyncMock()
+        mock_repo.release_visuals_to_pending = AsyncMock()
         mock_vault = mock_get_vault.return_value
         mock_vault.store_visual_evidence_batch = MagicMock()
 
-        await painter_flow.fn(batch_size=1)
+        result = await painter_flow.fn(batch_size=1)
 
-        # The batched store raised, so every extracted video is marked FAILED.
-        mock_repo.mark_step_failed.assert_called_once_with("VIDEO_001", "visuals")
+        mock_repo.release_visuals_to_pending.assert_awaited_once_with("VIDEO_001")
+        mock_repo.mark_step_failed.assert_not_awaited()
+        assert result["visuals_stored"] == 0 and result["videos_failed"] == 1
         mock_repo.mark_visuals_safe.assert_not_called()
 
 

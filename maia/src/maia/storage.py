@@ -33,10 +33,10 @@ async def commit_artifacts(
     label: str,
     store: Callable[[Callable[[], Any]], Awaitable[Any]] | None = None,
     vault: Any | None = None,
-) -> None:
+) -> set[str]:
     """Write ``items`` (``vault_rel_path, bytes``) to the vault in ONE commit, then
-    mark every ``video_ids`` entry safe. On failure, roll every id back via
-    ``on_failure``.
+    mark every ``video_ids`` entry safe. Return the IDs with confirmed markers.
+    On failure, release only IDs not yet marked via ``on_failure``.
 
     ``video_ids`` may contain repeats relative to ``items`` (e.g. many frames map
     to one video id); each id is marked exactly once via de-duplication.
@@ -46,7 +46,7 @@ async def commit_artifacts(
     ``atlas.vault.get_vault()``.
     """
     if not items:
-        return
+        return set()
     run_logger = logger
     if vault is None:
         from atlas.vault import get_vault as _get_vault
@@ -63,12 +63,16 @@ async def commit_artifacts(
         from maia.utils import vault_op_with_retry as _store
 
         store = _store
+    completed: set[str] = set()
     try:
         await store(lambda: vault.store_batch([(path, io.BytesIO(data)) for path, data in items]))
         for vid in dict.fromkeys(video_ids):
             await mark_safe(vid)
+            completed.add(vid)
         run_logger.info(f"Batched {len(items)} {label} into ONE vault commit")
     except Exception as e:
         run_logger.exception(f"Batched {label} store failed ({len(items)} items): {e}")
         for vid in dict.fromkeys(video_ids):
-            await on_failure(vid)
+            if vid not in completed:
+                await on_failure(vid)
+    return completed

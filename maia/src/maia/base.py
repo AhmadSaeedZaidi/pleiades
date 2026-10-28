@@ -12,9 +12,8 @@ store the results -> report stats" agent repeats the *same* control loop:
 
 ``BaseBatchAgent`` implements that loop exactly once; concrete agents supply the
 three hooks (``claim_batch`` / ``process_one`` / ``store_results``) plus policy
-constants. This is a pure refactor of the former per-agent ``*_flow`` functions —
-the observable behaviour (logging, vault commits, DB markers, error handling) is
-unchanged.
+constants. Storage hooks report confirmed video markers separately from attempts;
+the legacy ``videos_processed`` key remains an attempted-count alias.
 """
 
 from __future__ import annotations
@@ -29,6 +28,17 @@ from atlas.models import Video
 from atlas.state import clear_quota_exhausted
 
 logger = logging.getLogger(__name__)
+
+
+def extraction_stats(attempted: int, succeeded: int, counter: str) -> dict[str, int]:
+    """Keep the legacy attempted-count alias while exposing durable outcomes."""
+    return {
+        "videos_processed": attempted,
+        "videos_attempted": attempted,
+        "videos_succeeded": succeeded,
+        "videos_failed": attempted - succeeded,
+        counter: succeeded,
+    }
 
 
 class BaseBatchAgent(abc.ABC):
@@ -48,6 +58,7 @@ class BaseBatchAgent(abc.ABC):
     # end of a successful (non-raise_on) cycle. Set False for agents that do
     # not enforce quota gating.
     clear_quota_after_cycle: bool = True
+    progress_counter: str = "videos_stored"
 
     @staticmethod
     def add_cli_args(parser: argparse.ArgumentParser) -> None:
@@ -64,12 +75,12 @@ class BaseBatchAgent(abc.ABC):
         Its return value is collected and passed to :meth:`store_results`."""
 
     # ── optional hooks ─────────────────────────────────────────────────────
-    async def store_results(self, results: list[Any]) -> None:
+    async def store_results(self, results: list[Any]) -> int:
         """Persist/commit a batch of successfully-processed results.
 
         ``results`` excludes any item whose processing raised.
         """
-        return None
+        return 0
 
     async def after_cycle(self) -> None:
         """Hook run after results are stored (only when no ``raise_on`` error)."""
@@ -105,13 +116,17 @@ class BaseBatchAgent(abc.ABC):
                 if isinstance(r, self.raise_on):
                     raise r
 
-        ok = [r for r in gathered if not isinstance(r, Exception)]
-        await self.store_results(ok)
+        ok = [r for r in gathered if r is not None and not isinstance(r, BaseException)]
+        stored = await self.store_results(ok)
         if self.clear_quota_after_cycle:
             clear_quota_exhausted(self.name)
         await self.after_cycle()
 
         run_logger.info(
-            f"=== {self.name.capitalize()} Cycle Complete === Processed {len(targets)} items"
+            "=== %s Cycle Complete === Attempted %d, stored %d, unsuccessful %d",
+            self.name.capitalize(),
+            len(targets),
+            stored,
+            len(targets) - stored,
         )
-        return {"videos_processed": len(targets)}
+        return extraction_stats(len(targets), stored, self.progress_counter)

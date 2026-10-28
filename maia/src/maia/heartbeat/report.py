@@ -51,7 +51,9 @@ def _artifact_inventory_field(metrics: dict[str, Any] | None) -> str:
         f"Visual sets: {count('with_visuals')} · Audio tracks: {count('audios')}\n"
         f"Transcripts: {count('transcripts')}\n"
         f"Raw sources: {count('raw_sources')} · Full clips: {count('full_clips')}\n"
-        "SQL rows/flags; archived vault totals excluded."
+        "SQL flags; raw includes archived rows, audio/visual flags clear at archival.\n"
+        f"Ready: raw {count('ready_raw')} · audio {count('ready_audio')} · "
+        f"visuals {count('ready_visuals')} · transcripts {count('ready_transcripts')}"
     )
 
 
@@ -102,6 +104,14 @@ def build_report(
         )
         fields["Executor"] += f"\nObserved progress: {period}"
     fields["Artifact inventory (SQL)"] = _artifact_inventory_field(pipeline)
+    if pipeline is not None and workers is not None:
+        fields["Artifact inventory (SQL)"] += (
+            f"\nStored (observed): raw {progress.get('raw_stored', 0):,} · "
+            f"audio {progress.get('audio_stored', 0):,} · "
+            f"visuals {progress.get('visuals_stored', 0):,} · "
+            f"transcripts {progress.get('transcripts_staged', 0):,} "
+            f"({progress.get('transcript_notices', 0):,} notices)"
+        )
     if pipeline is None:
         fields["Extraction"] = "Metrics unavailable"
         issues.append("extraction metrics unavailable")

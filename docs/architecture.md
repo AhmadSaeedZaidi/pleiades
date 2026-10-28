@@ -27,11 +27,22 @@ Signals drain the scheduler according to the
 Prefect flow adapters remain for rollback/compatibility, without owning cadence.
 
 Hunter acknowledges a discovery page after database persistence succeeds.
-Streamer fetches source media once into the vault. Singer and Painter derive
-audio/keyframes from it; Scribe prefers captions and may use bounded paid audio
+Streamer fetches raw audio and stream metadata into the vault. Singer derives
+audio locally; Painter uses the metadata to fetch frames from YouTube and
+refreshes expired stream URLs. Scribe prefers captions and may use bounded paid audio
 transcription. Scribe stages transcript JSON in PostgreSQL. Janitor owns batched
 transcript vault writes and finalization. Full clips and historical discovery
 are manual capabilities.
+
+The shared media adapter uses the pinned yt-dlp release in Maia's dependency
+file and both Poetry lockfiles. Keep its maintained default YouTube client
+selection: forcing an obsolete client can stop raw downloads and fresh frame
+metadata even while Singer remains idle and healthy. Validate upgrades with
+bounded metadata/media reads through the deployment's actual egress route.
+Extraction observations distinguish attempts, confirmed storage markers and
+transcript notices; see the [heartbeat](heartbeat.md). Targeted visual recovery
+accepts at most 100 explicitly diagnosed IDs, requires intact prerequisites,
+and changes only failed visual stages. It does not reset legacy failures.
 
 [Discovery balancing](discovery.md) limits regional concentration using channel
 metadata, population priors, country caps and bounded tag expansion. Existing

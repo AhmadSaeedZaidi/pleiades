@@ -19,6 +19,7 @@ from atlas.utils import QuotaExhaustedError
 from atlas.vault import get_vault
 from prefect import flow
 
+from maia.base import extraction_stats
 from maia.utils import notify_quota_exhausted, vault_op_with_retry
 
 from .loader import (
@@ -71,7 +72,7 @@ async def fetch_scribe_targets_task(batch_size: int) -> list[Video]:
     return targets  # type: ignore[no-any-return]
 
 
-async def process_transcript_task(video: Video) -> None:
+async def process_transcript_task(video: Video) -> str:
     """Transcribe a video and stage it locally for the janitor to persist.
 
     Idempotent on DONE. Releases to PENDING on rate-limit (for retry) and marks
@@ -86,7 +87,7 @@ async def process_transcript_task(video: Video) -> None:
     # from redundant STT/quota use (the claim gate already excludes it).
     if video.transcript_phase == "DONE":
         run_logger.info(f"Transcript already done for {vid_id} — skipping")
-        return
+        return "skipped"
 
     try:
         segments = await _transcribe(video)
@@ -98,6 +99,7 @@ async def process_transcript_task(video: Video) -> None:
         )
         await video_repo.mark_transcript_safe(vid_id)
         run_logger.info(f"Scribed transcript for {vid_id}")
+        return "transcript"
 
     except QuotaExhaustedError:
         await notify_quota_exhausted("scribe")
@@ -107,6 +109,7 @@ async def process_transcript_task(video: Video) -> None:
         # instead of being permanently marked as having no transcript.
         run_logger.warning(f"Rate-limited on {vid_id}, releasing for retry: {e}")
         await video_repo.release_transcript_to_pending(vid_id)
+        return "deferred"
     except TranscriptTooLongError:
         # Long video with no auto transcript: store a templated notice so the
         # corpus (and the janitor's vault flush) has a record, without spending
@@ -119,6 +122,7 @@ async def process_transcript_task(video: Video) -> None:
             content_json=[{"text": SCRIBE_LONG_VIDEO_MESSAGE}],
         )
         await video_repo.mark_transcript_safe(vid_id)
+        return "notice"
     except TranscriptExtractionError as e:
         # No transcript is obtainable for this video, but that is a *fact about
         # the video*, not a pipeline failure. Record it the same way the
@@ -137,9 +141,11 @@ async def process_transcript_task(video: Video) -> None:
             content_json=[{"text": SCRIBE_NO_TRANSCRIPT_MESSAGE}],
         )
         await video_repo.mark_transcript_safe(vid_id)
+        return "notice"
     except Exception as e:
         run_logger.exception(f"Failed to scribe {vid_id} after retries: {e}")
         await video_repo.mark_step_failed(vid_id, "transcript")
+        return "failed"
 
 
 async def _transcribe(video: Video) -> list[dict[str, Any]]:
@@ -210,10 +216,11 @@ async def scribe_operation(batch_size: int = 10) -> dict[str, Any]:
 
     sem = asyncio.Semaphore(MAX_CONCURRENT_TRANSCRIPTS)
 
-    async def _bounded(video: Video) -> None:
+    async def _bounded(video: Video) -> str:
         async with sem:
-            await process_transcript_task(video)
+            outcome = await process_transcript_task(video)
             await asyncio.sleep(SCRIBE_THROTTLE_SECONDS)
+            return outcome
 
     results = await asyncio.gather(*[_bounded(v) for v in targets], return_exceptions=True)
     # Propagate any QuotaExhaustedError that was caught by return_exceptions
@@ -224,8 +231,20 @@ async def scribe_operation(batch_size: int = 10) -> dict[str, Any]:
     # Cycle completed without quota exhaustion — clear any stale marker.
     clear_quota_exhausted("scribe")
 
-    run_logger.info(f"=== Scribe Cycle Complete === Processed {len(targets)} videos")
-    return {"videos_processed": len(targets)}
+    real = sum(result == "transcript" for result in results)
+    notices = sum(result == "notice" for result in results)
+    skipped = sum(result == "skipped" for result in results)
+    stats = extraction_stats(len(targets), real, "transcripts_staged")
+    stats["transcript_notices"] = notices
+    stats["videos_unavailable"] = notices
+    stats["videos_failed"] -= notices + skipped
+    run_logger.info(
+        "Scribe complete: %d transcripts, %d notices, %d unsuccessful",
+        real,
+        notices,
+        stats["videos_failed"],
+    )
+    return stats
 
 
 @flow(name="run_scribe_cycle")

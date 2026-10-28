@@ -77,3 +77,54 @@ async def test_artifact_inventory_uses_sql_flags_and_counts_cold_transcript_poin
     assert snapshot["transcripts"] == 2
     assert snapshot["with_visuals"] == snapshot["raw_sources"] == snapshot["full_clips"] == 1
     assert snapshot["audios"] == 2
+
+
+async def test_ready_counts_exclude_archived_retired_and_legacy_failed_inputs(storage_pool):
+    repo = VideoRepository(storage_pool)
+    await repo._execute("""
+        INSERT INTO videos(id,channel_id,title,status,fetched,has_audio,has_visuals,has_transcript)
+        VALUES ('ready','channel','ready','PROCESSING',TRUE,FALSE,FALSE,FALSE),
+               ('archived','channel','old','ARCHIVED',TRUE,FALSE,FALSE,FALSE),
+               ('legacy','channel','failed','FAILED',TRUE,FALSE,FALSE,FALSE);
+        INSERT INTO videos(id,channel_id,title,status,fetched,has_audio,retired_at)
+            VALUES ('retired','channel','parked','PROCESSING',TRUE,FALSE,now());
+        INSERT INTO videos(id,channel_id,title,status,fetched,last_updated_at)
+            VALUES ('raw','channel','source','PENDING',FALSE,now()-interval '1 hour');
+    """)
+    row = await repo.pipeline_snapshot()
+    assert (
+        row["ready_raw"]
+        == row["ready_audio"]
+        == row["ready_visuals"]
+        == row["ready_transcripts"]
+        == 1
+    )
+
+
+async def test_visual_recovery_only_requeues_intact_diagnosed_sources(storage_pool):
+    repo = VideoRepository(storage_pool)
+    await repo._execute("""
+        UPDATE videos SET status='PROCESSING',raw_phase='DONE',audio_phase='DONE',
+            transcript_phase='DONE',visuals_phase='FAILED',has_visuals=FALSE,
+            has_audio=TRUE,fetched=TRUE,raw_uri='memory://raw' WHERE id='V1';
+        INSERT INTO transcripts(video_id,content) VALUES ('V1','[{"text":"keep"}]');
+        INSERT INTO videos(id,channel_id,title,status,raw_phase,audio_phase,
+            transcript_phase,visuals_phase,has_visuals,fetched,raw_uri,retired_at)
+        SELECT id,'channel',id,status,'DONE','DONE','DONE','FAILED',FALSE,TRUE,
+            'memory://raw',retired_at
+        FROM (VALUES ('legacy','FAILED',NULL::timestamptz),
+                     ('retired','PROCESSING',now()),
+                     ('changed','PROCESSING',NULL::timestamptz)) v(id,status,retired_at);
+        UPDATE videos SET audio_phase='PENDING' WHERE id='changed';
+    """)
+    ids = ["V1", "legacy", "retired", "changed"]
+    assert await repo.retry_failed_visuals(ids) == ["V1"]
+    assert await repo.retry_failed_visuals(ids) == []
+    assert await repo.retry_failed_visuals([]) == []
+    rows = await repo._fetch_all("SELECT id,visuals_phase FROM videos WHERE id <> 'V1'")
+    assert all(row["visuals_phase"] == "FAILED" for row in rows)
+    row = await repo._fetch_one("SELECT raw_uri,has_audio FROM videos WHERE id='V1'")
+    assert row == {"raw_uri": "memory://raw", "has_audio": True}
+    assert (await repo._fetch_one("SELECT content FROM transcripts WHERE video_id='V1'"))[
+        "content"
+    ] == [{"text": "keep"}]
