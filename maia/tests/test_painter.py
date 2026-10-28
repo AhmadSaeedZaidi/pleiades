@@ -20,6 +20,28 @@ from maia.painter.streamer import StealthVideoStreamer, StreamRateLimitError
 FAKE_WEBP = b"RIFF\x00\x00\x00\x00WEBP" + b"\x00" * 100
 
 
+async def test_expired_cached_stream_refreshes_before_frame_requests(painter_vault):
+    from atlas.models import Video
+
+    painter_vault.fetch_binary.return_value = io.BytesIO(
+        json.dumps({"url": "https://example.com/expired?expire=1", "duration": 100}).encode()
+    )
+    fresh = "https://example.com/fresh"
+    with (
+        patch("maia.painter.flow.VideoRepository"),
+        patch("maia.painter.flow.StealthVideoStreamer") as streamer,
+        patch(
+            "maia.painter.flow._extract_frames_surgical", return_value=[(0, FAKE_WEBP)]
+        ) as frames,
+    ):
+        streamer.return_value.extract_info.return_value = {"url": fresh, "duration": 100}
+        streamer.return_value.extract_heatmap_peaks.return_value = []
+        result = await process_frames_task(Video(id="expired", title="input"))
+    assert result == ("expired", [(0, FAKE_WEBP)])
+    frames.assert_called_once()
+    assert frames.call_args.args[0] == fresh
+
+
 @pytest.fixture(autouse=True)
 def painter_vault():
     """Legacy metadata fallback tests start with an empty, local fake vault."""

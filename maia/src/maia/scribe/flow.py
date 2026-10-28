@@ -161,7 +161,7 @@ async def _transcribe(video: Video) -> list[dict[str, Any]]:
     # a genuine "no captions" failure (TranscriptExtractionError) justifies the
     # paid fallback. Quota exhaustion is a real signal and must propagate too.
     try:
-        return TranscriptLoader().fetch(vid_id)
+        return await asyncio.to_thread(TranscriptLoader().fetch, vid_id)
     except (QuotaExhaustedError, TranscriptRateLimitError):
         raise
     except Exception as e:  # noqa: BLE001 - any other failure means no captions

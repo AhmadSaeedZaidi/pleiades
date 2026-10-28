@@ -14,8 +14,10 @@ import random
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 import numpy as np
 from atlas.models import Video
@@ -278,7 +280,11 @@ async def process_frames_task(video: Video) -> tuple[str, list[tuple[int, bytes]
 
         if info is not None:
             stream_url = select_stream_url(info)
-            if stream_url:
+            expires = parse_qs(urlparse(stream_url or "").query).get("expire", [])
+            # Cached metadata outlives YouTube's signed CDN URLs. Refresh known
+            # expired links before trying dozens of guaranteed-to-fail frames.
+            expired = bool(expires and expires[0].isdigit() and int(expires[0]) <= time.time() + 60)
+            if stream_url and not expired:
                 local_input = stream_url
                 duration = info.get("duration", 0) or 0
                 chapters = [c.get("start_time", 0.0) for c in info.get("chapters", []) or []]
@@ -288,7 +294,7 @@ async def process_frames_task(video: Video) -> tuple[str, list[tuple[int, bytes]
 
         # Fallback (legacy rows missing vault metadata): fresh YouTube metadata.
         if local_input is None:
-            run_logger.info(f"No vault metadata for {vid_id}; falling back to YouTube frames")
+            run_logger.info(f"No usable vault stream for {vid_id}; refreshing YouTube metadata")
             streamer = StealthVideoStreamer()
             info = await asyncio.to_thread(streamer.extract_info, vid_id)
             duration = info.get("duration", 0) or 0

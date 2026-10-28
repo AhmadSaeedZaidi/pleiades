@@ -1,5 +1,7 @@
 """A completed loop is not proof of a stored extraction result."""
 
+import asyncio
+import threading
 from unittest.mock import AsyncMock, patch
 
 from atlas.models import Video
@@ -44,3 +46,27 @@ async def test_scribe_separates_real_transcripts_notices_and_retryable_failures(
         result = await scribe_operation()
     assert result["transcripts_staged"] == result["transcript_notices"] == 1
     assert result["videos_failed"] == 1 and result["videos_unavailable"] == 1
+
+
+async def test_caption_fetch_does_not_block_other_scheduler_work():
+    from maia.scribe.flow import _transcribe
+
+    released = threading.Event()
+    blocked: list[bool] = []
+    segments = [{"text": "caption", "start": 0, "duration": 1}]
+
+    def captions(_video_id):
+        blocked.append(not released.wait(timeout=1))
+        return segments
+
+    async def other_worker():
+        await asyncio.sleep(0)
+        released.set()
+
+    with patch("maia.scribe.flow.TranscriptLoader") as loader:
+        loader.return_value.fetch.side_effect = captions
+        result, _ = await asyncio.gather(
+            _transcribe(Video(id="video", title="input")), other_worker()
+        )
+    assert result == segments
+    assert blocked == [False]
