@@ -39,6 +39,7 @@ MAX_CONCURRENT_VIDEOS = 1
 FRAME_INTERVAL_SECONDS = 15.0
 MIN_FRAMES = 4
 MAX_FRAMES = 60
+INITIAL_FRAME_FAILURE_LIMIT = 3
 HEATMAP_PEAKS = 8
 FRAME_HEIGHT = 720
 # WebP is ~50% smaller than JPEG at comparable quality and is universally
@@ -221,8 +222,19 @@ def _extract_frames_surgical(
     frames_to_vault: list[tuple[int, bytes]] = []
 
     fps = 30.0
+    initial_failures = 0
 
-    for ts in target_timestamps:
+    # Probe distant positions first: a missing opening segment does not mean
+    # the entire stream is unusable. Preserve chronological output below.
+    probe_indices = list(
+        dict.fromkeys((0, len(target_timestamps) // 2, len(target_timestamps) - 1))
+    )
+    if not target_timestamps:
+        return []
+    order = probe_indices + [i for i in range(len(target_timestamps)) if i not in probe_indices]
+
+    for index in order:
+        ts = target_timestamps[index]
         if ts > duration:
             continue
 
@@ -234,8 +246,13 @@ def _extract_frames_surgical(
             frames_to_vault.append((frame_idx, image_bytes))
         else:
             run_logger.warning(f"FFmpeg failed to grab frame at {ts}s")
+            if not frames_to_vault:
+                initial_failures += 1
+                if initial_failures >= INITIAL_FRAME_FAILURE_LIMIT:
+                    run_logger.warning("Stream produced no initial frames; stopping this URL")
+                    break
 
-    return frames_to_vault
+    return sorted(frames_to_vault, key=lambda frame: frame[0])
 
 
 async def process_frames_task(video: Video) -> tuple[str, list[tuple[int, bytes]]] | None:

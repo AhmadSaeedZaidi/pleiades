@@ -20,6 +20,32 @@ from maia.painter.streamer import StealthVideoStreamer, StreamRateLimitError
 FAKE_WEBP = b"RIFF\x00\x00\x00\x00WEBP" + b"\x00" * 100
 
 
+def test_unusable_frame_url_has_a_bounded_request_budget():
+    from maia.painter.flow import _extract_frames_surgical
+
+    with patch("maia.painter.flow._ffmpeg_extract_frame", return_value=None) as frame:
+        assert (
+            _extract_frames_surgical("https://example.com/dead", list(range(60)), 100, MagicMock())
+            == []
+        )
+    assert frame.call_count == 3
+
+
+def test_frame_sampling_preserves_video_with_missing_opening_segments():
+    from maia.painter.flow import _extract_frames_surgical
+
+    with patch(
+        "maia.painter.flow._ffmpeg_extract_frame",
+        side_effect=lambda url, timestamp: FAKE_WEBP if timestamp >= 30 else None,
+    ) as frame:
+        result = _extract_frames_surgical(
+            "https://example.com/live", [0, 15, 30, 45], 100, MagicMock()
+        )
+    assert len(result) == 2 and frame.call_count == 4
+    assert [call.args[1] for call in frame.call_args_list[:3]] == [0, 30, 45]
+    assert [index for index, _ in result] == [900, 1350]
+
+
 async def test_expired_cached_stream_refreshes_before_frame_requests(painter_vault):
     from atlas.models import Video
 

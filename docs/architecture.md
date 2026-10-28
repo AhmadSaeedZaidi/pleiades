@@ -43,6 +43,8 @@ Extraction observations distinguish attempts, confirmed storage markers and
 transcript notices; see the [heartbeat](heartbeat.md). Targeted visual recovery
 accepts at most 100 explicitly diagnosed IDs, requires intact prerequisites,
 and changes only failed visual stages. It does not reset legacy failures.
+Painter probes widely separated timestamps before abandoning an unusable URL,
+preserving valid later frames when opening segments are missing.
 
 [Discovery balancing](discovery.md) limits regional concentration using channel
 metadata, population priors, country caps and bounded tag expansion. Existing
