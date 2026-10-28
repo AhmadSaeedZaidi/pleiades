@@ -1,30 +1,156 @@
-version: '3.8'
+# Persistent vault mount shared by all agents that write to Atlas Vault
+# (hunter metadata, scribe transcripts, painter frames, janitor flushes).
+x-vault-volume: &vault-volume
+  - ./data/vault:/vault
 
 services:
-  test_db:
-    image: postgres:17
+  # Database: PostgreSQL 15 with TimescaleDB
+  db:
+    image: postgres:15
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
       POSTGRES_DB: videodb
     ports:
       - "5432:5432"
+    volumes:
+      - ./atlas/src/atlas/schema.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  # 2. Collector App
-  collector:
-    build: 
-      context: ./collector 
+  # Maia Agent 1: Hunter (Discovery & Ingestion)
+  hunter:
+    build:
+      context: .
       dockerfile: Dockerfile
-    depends_on:
-      test_db:
-        condition: service_healthy
+    command: python -m maia hunter --batch-size 10
     environment:
-      DATABASE_URL: postgresql://postgres:password@test_db:5432/videodb
-      YOUTUBE_API_KEYS: ${YOUTUBE_API_KEYS}
+      DATABASE_URL: postgresql://postgres:password@db:5432/videodb
+      YOUTUBE_API_KEY_POOL_JSON: ${YOUTUBE_API_KEY_POOL_JSON}
       PREFECT_API_KEY: ${PREFECT_API_KEY}
       PREFECT_API_URL: ${PREFECT_API_URL}
+      VAULT_PATH: ${VAULT_PATH:-/vault}
+    restart: unless-stopped
+    volumes: *vault-volume
+
+  # Maia Agent 2: Tracker (Velocity Monitoring)
+  tracker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python -m maia tracker --batch-size 50
+    environment:
+      DATABASE_URL: postgresql://postgres:password@db:5432/videodb
+      YOUTUBE_API_KEY_POOL_JSON: ${YOUTUBE_API_KEY_POOL_JSON}
+      PREFECT_API_KEY: ${PREFECT_API_KEY}
+      PREFECT_API_URL: ${PREFECT_API_URL}
+      VAULT_PATH: ${VAULT_PATH:-/vault}
+    restart: unless-stopped
+    volumes: *vault-volume
+
+  # Maia Agent 3: Janitor (Tiered Storage Cleanup)
+  janitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python -m maia janitor --dry-run false
+    environment:
+      DATABASE_URL: postgresql://postgres:password@db:5432/videodb
+      PREFECT_API_KEY: ${PREFECT_API_KEY}
+      PREFECT_API_URL: ${PREFECT_API_URL}
+      VAULT_PATH: ${VAULT_PATH:-/vault}
+      JANITOR_ENABLED: "true"
+      JANITOR_RETENTION_DAYS: "7"
+    restart: unless-stopped
+    volumes: *vault-volume
+
+  # Maia Agent 4: Archeologist (Historical Video Discovery)
+  archeologist:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python -m maia archeologist --start-year 2010 --end-year 2024
+    environment:
+      DATABASE_URL: postgresql://postgres:password@db:5432/videodb
+      YOUTUBE_API_KEY_POOL_JSON: ${YOUTUBE_API_KEY_POOL_JSON}
+      PREFECT_API_KEY: ${PREFECT_API_KEY}
+      PREFECT_API_URL: ${PREFECT_API_URL}
+      VAULT_PATH: ${VAULT_PATH:-/vault}
+    restart: unless-stopped
+    volumes: *vault-volume
+
+  # Maia Agent 5: Scribe (Transcript Extraction)
+  scribe:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python -m maia scribe --batch-size 10
+    environment:
+      DATABASE_URL: postgresql://postgres:password@db:5432/videodb
+      PREFECT_API_KEY: ${PREFECT_API_KEY}
+      PREFECT_API_URL: ${PREFECT_API_URL}
+      VAULT_PATH: ${VAULT_PATH:-/vault}
+    restart: unless-stopped
+    volumes: *vault-volume
+
+  # Maia Agent 6: Painter (Keyframe Extraction)
+  painter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python -m maia painter --batch-size 5
+    environment:
+      DATABASE_URL: postgresql://postgres:password@db:5432/videodb
+      PREFECT_API_KEY: ${PREFECT_API_KEY}
+      PREFECT_API_URL: ${PREFECT_API_URL}
+      VAULT_PATH: ${VAULT_PATH:-/vault}
+      # Stealth Protocol Configuration (Optional)
+      # YOUTUBE_COOKIES_PATH is what Atlas config actually reads for the
+      # yt-dlp authenticated/POT session. Override MAIA_COOKIES_PATH to mount
+      # a different cookies file from the host.
+      YOUTUBE_COOKIES_PATH: /cookies/youtube_cookies.txt
+      MAIA_PROXY_URL: ${MAIA_PROXY_URL:-}
+    restart: unless-stopped
+    volumes:
+      - ./data/vault:/vault
+      - ${MAIA_COOKIES_PATH:-./www.youtube.cookies.txt}:/cookies/youtube_cookies.txt:ro
+
+  # Maia Agent 7: Streamer (YouTube fetch + raw storage producer)
+  streamer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python -m maia streamer --batch-size 5
+    environment:
+      DATABASE_URL: postgresql://postgres:password@db:5432/videodb
+      PREFECT_API_KEY: ${PREFECT_API_KEY}
+      PREFECT_API_URL: ${PREFECT_API_URL}
+      VAULT_PATH: ${VAULT_PATH:-/vault}
+      YOUTUBE_COOKIES_PATH: /cookies/youtube_cookies.txt
+      MAIA_PROXY_URL: ${MAIA_PROXY_URL:-}
+    restart: unless-stopped
+    volumes:
+      - ./data/vault:/vault
+      - ${MAIA_COOKIES_PATH:-./www.youtube.cookies.txt}:/cookies/youtube_cookies.txt:ro
+
+  # Maia Agent 9: Singer (Audio extraction + vault storage consumer)
+  singer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python -m maia singer --batch-size 10
+    depends_on:
+      streamer:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql://postgres:password@db:5432/videodb
+      PREFECT_API_KEY: ${PREFECT_API_KEY}
+      PREFECT_API_URL: ${PREFECT_API_URL}
+      VAULT_PATH: ${VAULT_PATH:-/vault}
+      GROK_API_KEY: ${GROK_API_KEY:-}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+    restart: unless-stopped
+    volumes: *vault-volume

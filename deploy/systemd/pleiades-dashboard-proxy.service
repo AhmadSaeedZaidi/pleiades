@@ -1,0 +1,21 @@
+[Unit]
+Description=Pleiades HTTPS and password proxy
+After=network-online.target pleiades-dashboard.service
+Wants=network-online.target pleiades-dashboard.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/code/pleiades
+EnvironmentFile=%h/code/pleiades/.secrets/dashboard-proxy.env
+Environment=XDG_DATA_HOME=%h/.local/share/pleiades-proxy
+Environment=XDG_CONFIG_HOME=%h/.config/pleiades-proxy
+Environment=GOMAXPROCS=2
+ExecStart=%h/.local/bin/caddy run --config %h/code/pleiades/deploy/caddy/Caddyfile --adapter caddyfile
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+NoNewPrivileges=true
+UMask=0077
+
+[Install]
+WantedBy=default.target

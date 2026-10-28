@@ -1,0 +1,18 @@
+[Unit]
+Description=Pleiades read-only dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/code/pleiades
+Environment=PYTHONPATH=%h/code/pleiades/dashboard/src:%h/code/pleiades/atlas/src
+ExecStart=%h/code/pleiades/.venv/bin/python -m pleiades_dashboard --host 127.0.0.1 --port 8080 --root-path /pleiades
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+NoNewPrivileges=true
+UMask=0077
+
+[Install]
+WantedBy=default.target

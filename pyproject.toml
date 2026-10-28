@@ -1,18 +1,44 @@
 [tool.ruff]
-line-length = 88
-target-version = "py310"
-lint.select = ["E", "F", "I"]
-lint.ignore = []
+line-length = 100
+target-version = "py312"
+lint.select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+]
+lint.ignore = [
+    "B904",  # raise-without-from-inside-except
+    "N802",  # function name should be lowercase (for DB column references)
+    "N806",  # variable in function should be lowercase
+    "TRY002",  # raising builtin exception types with messages is intentional here
+    "TRY003",  # raising builtins with descriptive messages is idiomatic/intentional
+]
+lint.per-file-ignores = { "tests/**/*.py" = ["N802", "N806"], "conftest.py" = ["N802", "N806"] }
 
 [tool.pytest.ini_options]
 minversion = "6.0"
 addopts = "-ra -q"
 testpaths = [
-    "tests",
-    "training/evaluation/tests"
+    "tiered_storage/tests",
+    "atlas/tests",
+    "maia/tests",
+    "mcp/tests",
+    "alkyone/tests/test_guard.py",
+    "dashboard/tests",
+]
+pythonpath = ["tiered_storage/src", "atlas/src", "maia/src", "mcp/src", "alkyone/src", "dashboard/src"]
+asyncio_mode = "auto"
+env = [
+    "DATABASE_URL=postgresql://test:test@127.0.0.1:1/test",
+    "YOUTUBE_API_KEY_POOL_JSON=[\"test_key_1\", \"test_key_2\", \"test_key_3\"]",
+    "VAULT_PROVIDER=huggingface",
+    "HF_DATASET_ID=mock/dataset",
+    "HF_TOKEN=mock-token",
+    "ENV=test",
+    "JANITOR_ENABLED=false",
 ]
 python_files = "test_*.py"
-
-[tool.black]
-line-length = 88
-target-version = ['py310']
